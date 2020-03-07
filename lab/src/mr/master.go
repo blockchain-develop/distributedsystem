@@ -2,6 +2,7 @@ package mr
 
 import (
 	"log"
+	"sync"
 	"time"
 )
 import "net"
@@ -15,6 +16,8 @@ type Master struct {
 	reduceHandle      map[int]*ReduceHandleInfo
 	nReduce           int
 	nMap              int
+	state             int
+	lock              *sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -41,6 +44,9 @@ type ReduceHandleInfo struct {
 }
 
 func (m *Master) Work(req *WorkRequest, rsp *WorkResponse) error {
+	m.lock.Lock()
+	defer  m.lock.Unlock()
+	m.state = HANDLING
 	// update handle state if worker finished work
 	if req.WorkInd == WORK_MAP {
 		handleInfo := m.mapHandle[req.WorkKey]
@@ -114,6 +120,7 @@ func (m *Master) Work(req *WorkRequest, rsp *WorkResponse) error {
 		}
 	}
 	rsp.WorkInd = WORK_NONE
+	m.state = HANDLE_FINISHED
 	return nil
 }
 
@@ -151,13 +158,9 @@ func (m *Master) Done() bool {
 	ret := false
 
 	// Your code here.
-	ret = true
-	for _, handleInfo := range m.reduceHandle {
-		if handleInfo.State != HANDLE_FINISHED {
-			ret = false
-			break
-		}
-	}
+	m.lock.Lock()
+	defer  m.lock.Unlock()
+	ret = (m.state == HANDLE_FINISHED)
 
 	// print all task state for test
 	/*
@@ -207,6 +210,8 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m.reduceHandle = reduceHandle
 	m.nReduce = nReduce
 	m.nMap = len(mapHandle)
+	m.state = HANDLE_INIT
+	m.lock = new(sync.Mutex)
 
 	m.server()
 	return &m
