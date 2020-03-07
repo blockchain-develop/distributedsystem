@@ -47,10 +47,10 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// Your worker implementation here.
 	req := WorkRequest{}
-	rsp := WorkResponse{}
 	req.WorkerId = 1
 	req.WorkInd = WORK_NONE
 	for true {
+		rsp := WorkResponse{}
 		call("Master.Work", &req, &rsp)
 		if rsp.WorkInd == WORK_MAP {
 			MapWork(mapf, rsp.WorkKey, rsp.WorkNumber, rsp.Number)
