@@ -115,7 +115,10 @@ func MapWork(mapf func(string, string) []KeyValue, fileName string, mapNumber in
 		}
 	}
 	for i, mapResultFile := range mapResultFiles {
-		os.Rename(mapResultFile.Name(), mapResultFileNames[i])
+		err := os.Rename(mapResultFile.Name(), mapResultFileNames[i])
+		if err != nil {
+			log.Fatalf("cannot rename file %v", fileName)
+		}
 		mapResultFile.Close()
 	}
 }

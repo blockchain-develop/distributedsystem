@@ -152,8 +152,8 @@ func (m *Master) Done() bool {
 
 	// Your code here.
 	ret = true
-	for _, handleInfo := range m.mapHandle {
-		if handleInfo.State != 2 {
+	for _, handleInfo := range m.reduceHandle {
+		if handleInfo.State != HANDLE_FINISHED {
 			ret = false
 			break
 		}
@@ -166,7 +166,7 @@ func (m *Master) Done() bool {
 	}
 	log.Printf("Reduce task info:")
 	for _, handleInfo := range m.reduceHandle {
-		log.Printf("%d %d %d %d %d %s ", handleInfo.ReduceNumber, handleInfo.State, handleInfo.StartTime, handleInfo.EndTime, handleInfo.WorkerId)
+		log.Printf("%d %d %d %d %d ", handleInfo.ReduceNumber, handleInfo.State, handleInfo.StartTime, handleInfo.EndTime, handleInfo.WorkerId)
 	}
 
 	return ret
