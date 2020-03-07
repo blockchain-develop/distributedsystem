@@ -159,7 +159,8 @@ func (m *Master) Done() bool {
 		}
 	}
 
-	// print all task state
+	// print all task state for test
+	/*
 	log.Printf("Map task info:")
 	for fileName, handleInfo := range m.mapHandle {
 		log.Printf("%d %d %d %d %d %s ", handleInfo.MapNumber, handleInfo.State, handleInfo.StartTime, handleInfo.EndTime, handleInfo.WorkerId, fileName)
@@ -168,6 +169,7 @@ func (m *Master) Done() bool {
 	for _, handleInfo := range m.reduceHandle {
 		log.Printf("%d %d %d %d %d ", handleInfo.ReduceNumber, handleInfo.State, handleInfo.StartTime, handleInfo.EndTime, handleInfo.WorkerId)
 	}
+	*/
 
 	return ret
 }
