@@ -201,6 +201,8 @@ func MakeMaster(files []string, nReduce int) *Master {
 			State: HANDLE_INIT,
 		}
 	}
+	m.mapHandle = mapHandle
+	m.reduceHandle = reduceHandle
 	m.nReduce = nReduce
 	m.nMap = len(mapHandle)
 
