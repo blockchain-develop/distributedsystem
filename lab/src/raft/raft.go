@@ -19,7 +19,6 @@ package raft
 
 import (
 	"log"
-	"math/rand"
 	"sync"
 	"time"
 )
@@ -47,6 +46,8 @@ type ApplyMsg struct {
 	Command      interface{}
 	CommandIndex int
 }
+
+var id int
 
 //
 // A Go object implementing a single Raft peer.
@@ -439,7 +440,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.voteFor = -1
 	rf.vote2MeCount = 0
-	rf.id = rand.Int()
+	rf.id = id
+	id ++
 
 	rf.requestVoteArgsChan = make(chan *RequestVoteArgs)
 	rf.requestVoteReplyChan = make(chan *RequestVoteReply)
