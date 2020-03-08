@@ -257,15 +257,15 @@ func (rf *Raft) startElection() {
 	log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	for i, _ := range rf.peers {
 		if i != rf.me {
-			go func() {
+			go func(server int) {
 				args := &RequestVoteArgs{
 					Term: rf.currentTerm,
 					CandidateId: rf.me,
 				}
 				reply := RequestVoteReply{}
-				rf.sendRequestVote(i, args, &reply)
+				rf.sendRequestVote(server, args, &reply)
 				rf.requestVoteReplyChan <- &reply
-			}()
+			}(i)
 		}
 	}
 }
@@ -274,14 +274,14 @@ func (rf *Raft) startHeartbeat() {
 	log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	for i, _ := range rf.peers {
 		if i != rf.me {
-			go func() {
+			go func(server int) {
 				args := &AppendEntriesArgs{
 					Term: rf.currentTerm,
 				}
 				reply := AppendEntriesReply{}
-				rf.sendAppendEntries(i, args, &reply)
+				rf.sendAppendEntries(server, args, &reply)
 				rf.appendEntriesReplyChan <- &reply
-			}()
+			}(i)
 		}
 	}
 }
