@@ -17,7 +17,11 @@ package raft
 //   in the same server.
 //
 
-import "sync"
+import (
+	"log"
+	"sync"
+	"time"
+)
 import "sync/atomic"
 import "../labrpc"
 
@@ -56,8 +60,24 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-
+	role                           int
+	currentTerm                    int
+	voteFor                        int
+	vote2MeCount                   int
+	timer                          *time.Timer
+	requestVoteArgsChan            chan *RequestVoteArgs
+	requestVoteReplyChan           chan *RequestVoteReply
+	requestVoteReplyInternalChan   chan *RequestVoteReply
+	appendEntriesArgsChan          chan *AppendEntriesArgs
+	appendEntriesReplyChan         chan *AppendEntriesReply
+	appendEntriesReplyInternalChan chan *AppendEntriesReply
 }
+
+const (
+	FOLLOWER   = iota
+	CANDIDATE
+	LEADER
+)
 
 // return currentTerm and whether this server
 // believes it is the leader.
@@ -66,6 +86,8 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	term = rf.currentTerm
+	isleader = (rf.role == LEADER)
 	return term, isleader
 }
 
@@ -109,7 +131,45 @@ func (rf *Raft) readPersist(data []byte) {
 }
 
 
+//
+// example RequestVote RPC arguments structure.
+// field names must start with capital letters!
+//
+type AppendEntriesArgs struct {
+	// Your data here (2A, 2B).
+	Term                int
+	LeaderId            int
+	PrevLogIndex        int
+	PrevLogTerm         int
+	Entries             []Entrie
+	LeaderCommit        int
+}
 
+//
+// example RequestVote RPC reply structure.
+// field names must start with capital letters!
+//
+type AppendEntriesReply struct {
+	// Your data here (2A).
+	Term                 int
+	Success              bool
+}
+
+type Entrie struct {
+
+}
+
+//
+// example RequestVote RPC handler.
+//
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	// Your code here (2A, 2B).
+	rf.appendEntriesArgsChan <- args
+	reply, ok := <- rf.appendEntriesReplyInternalChan
+	if !ok || reply == nil {
+		log.Fatal("append entries fatal")
+	}
+}
 
 //
 // example RequestVote RPC arguments structure.
@@ -117,6 +177,10 @@ func (rf *Raft) readPersist(data []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term                int
+	CandidateId         int
+	LastLogIndex        int
+	LastLogTerm         int
 }
 
 //
@@ -125,6 +189,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Term                 int
+	VoteGranted          bool
 }
 
 //
@@ -132,6 +198,11 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.requestVoteArgsChan <- args
+	reply, ok := <- rf.requestVoteReplyInternalChan
+    if !ok || reply == nil {
+    	log.Fatal("Request vote fatal.")
+	}
 }
 
 //
@@ -168,6 +239,130 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
+}
+
+//
+func (rf *Raft) startElection() {
+	rf.currentTerm ++
+	rf.voteFor = rf.me
+	rf.vote2MeCount = 1
+	for i, _ := range rf.peers {
+		if i != rf.me {
+			go func() {
+				args := &RequestVoteArgs{
+					Term: rf.currentTerm,
+				}
+				reply := RequestVoteReply{}
+				rf.sendRequestVote(i, args, &reply)
+				rf.requestVoteReplyChan <- &reply
+			}()
+		}
+	}
+}
+
+func (rf *Raft) startHeartbeat() {
+	for i, _ := range rf.peers {
+		if i != rf.me {
+			go func() {
+				args := &AppendEntriesArgs{
+					Term: rf.currentTerm,
+				}
+				reply := AppendEntriesReply{}
+				rf.sendAppendEntries(i, args, &reply)
+				rf.appendEntriesReplyChan <- &reply
+			}()
+		}
+	}
+}
+
+func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
+	reply := &RequestVoteReply{}
+	if args.Term < rf.currentTerm {
+		reply.VoteGranted = false
+		return reply
+	}
+	if rf.voteFor == -1 {
+		reply.VoteGranted = true
+		rf.voteFor = args.CandidateId
+		rf.timer.Reset(time.Millisecond * 300)
+		return reply
+	}
+	reply.VoteGranted = false
+	return reply
+}
+
+func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
+	if reply.VoteGranted == false {
+		return
+	}
+	if rf.role != CANDIDATE {
+		return
+	}
+	rf.vote2MeCount ++
+	if rf.vote2MeCount > len(rf.peers) {
+		rf.role = LEADER
+		rf.timer.Reset(time.Millisecond * 100)
+	}
+}
+
+func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
+	reply := &AppendEntriesReply{}
+	if args.Term < rf.currentTerm {
+		reply.Success = false
+		return reply
+	}
+	reply.Success = true
+	rf.currentTerm = args.Term
+	rf.voteFor = -1
+	rf.role = FOLLOWER
+	rf.timer.Reset(time.Millisecond * 300)
+	return reply
+}
+
+func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
+
+}
+
+func (rf *Raft) eventLoop() {
+	for {
+		select {
+		case <- rf.timer.C:
+			if rf.role == FOLLOWER || rf.role == CANDIDATE {
+				rf.role = CANDIDATE
+				rf.startElection()
+				rf.timer.Reset(time.Millisecond * 300)
+			} else {
+				rf.startHeartbeat()
+				rf.timer.Reset(time.Millisecond * 100)
+			}
+		case requestVoteArgs, ok :=  <- rf.requestVoteArgsChan:
+			if !ok || requestVoteArgs == nil {
+				break
+			}
+			reply := rf.handleRequestVote(requestVoteArgs)
+			rf.requestVoteReplyInternalChan <- reply
+		case requestVoteReply, ok := <- rf.requestVoteReplyChan:
+			if !ok || requestVoteReply == nil {
+				break
+			}
+			rf.handleReqeustVoteReply(requestVoteReply)
+		case appendEntriesArgs, ok := <- rf.appendEntriesArgsChan:
+			if !ok || appendEntriesArgs == nil {
+				break
+			}
+			reply := rf.handleAppendEntries(appendEntriesArgs)
+			rf.appendEntriesReplyInternalChan <- reply
+		case appendEntriesReply, ok := <- rf.appendEntriesReplyChan:
+			if !ok || appendEntriesReply == nil {
+				break
+			}
+			rf.handleAppendEntriesReply(appendEntriesReply)
+		}
+	}
+}
 
 //
 // the service using Raft (e.g. a k/v server) wants to start
@@ -234,10 +429,22 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	rf.role = FOLLOWER
+	rf.currentTerm = 0
+	rf.voteFor = -1
+	rf.vote2MeCount = 0
+
+	rf.requestVoteArgsChan = make(chan *RequestVoteArgs)
+	rf.requestVoteReplyChan = make(chan *RequestVoteReply)
+	rf.requestVoteReplyInternalChan = make(chan *RequestVoteReply)
+	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs)
+	rf.appendEntriesReplyChan = make(chan *AppendEntriesReply)
+	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
+	rf.timer = time.NewTimer(time.Millisecond * 300)
+	go rf.eventLoop()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
-
 
 	return rf
 }
