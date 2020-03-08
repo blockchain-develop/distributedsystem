@@ -168,9 +168,11 @@ type Entrie struct {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	// Your code here (2A, 2B).
 	rf.appendEntriesArgsChan <- args
-	reply, ok := <- rf.appendEntriesReplyInternalChan
-	if !ok || reply == nil {
+	replyInternal, ok := <- rf.appendEntriesReplyInternalChan
+	if !ok || replyInternal == nil {
 		log.Fatal("append entries fatal")
+	} else {
+		*reply = *replyInternal
 	}
 }
 
@@ -202,9 +204,11 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.requestVoteArgsChan <- args
-	reply, ok := <- rf.requestVoteReplyInternalChan
-    if !ok || reply == nil {
+	replyInternal, ok := <- rf.requestVoteReplyInternalChan
+    if !ok || replyInternal == nil {
     	log.Fatal("Request vote fatal.")
+	} else {
+		*reply = *replyInternal
 	}
 }
 
@@ -288,18 +292,20 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	log.Printf("request vote args: %v", args)
 	reply := &RequestVoteReply{}
-	reply.Term = rf.currentTerm
 	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 	} else if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.voteFor = args.CandidateId
 		rf.role = FOLLOWER
 		reply.VoteGranted = true
+		reply.Term = rf.currentTerm
 		rf.timer.Reset(time.Millisecond * 300)
 	} else if rf.voteFor == -1 {
-		reply.VoteGranted = true
 		rf.voteFor = args.CandidateId
+		reply.VoteGranted = true
+		reply.Term = rf.currentTerm
 		rf.timer.Reset(time.Millisecond * 300)
 	} else {
 		reply.VoteGranted = false
