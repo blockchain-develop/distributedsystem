@@ -19,6 +19,7 @@ package raft
 
 import (
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -60,6 +61,7 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
+	id                             int
 	role                           int
 	currentTerm                    int
 	voteFor                        int
@@ -249,11 +251,13 @@ func (rf *Raft) startElection() {
 	rf.currentTerm ++
 	rf.voteFor = rf.me
 	rf.vote2MeCount = 1
+	log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			go func() {
 				args := &RequestVoteArgs{
 					Term: rf.currentTerm,
+					CandidateId: rf.me,
 				}
 				reply := RequestVoteReply{}
 				rf.sendRequestVote(i, args, &reply)
@@ -264,6 +268,7 @@ func (rf *Raft) startElection() {
 }
 
 func (rf *Raft) startHeartbeat() {
+	log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			go func() {
@@ -280,50 +285,51 @@ func (rf *Raft) startHeartbeat() {
 
 func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	reply := &RequestVoteReply{}
+	reply.Term = rf.currentTerm
 	if args.Term < rf.currentTerm {
 		reply.VoteGranted = false
-		return reply
-	}
-	if rf.voteFor == -1 {
+	} else if rf.voteFor == -1 {
 		reply.VoteGranted = true
 		rf.voteFor = args.CandidateId
 		rf.timer.Reset(time.Millisecond * 300)
-		return reply
+	} else {
+		reply.VoteGranted = false
 	}
-	reply.VoteGranted = false
+	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	return reply
 }
 
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
-	if reply.VoteGranted == false {
-		return
+	if reply.VoteGranted == true && rf.role == CANDIDATE {
+		rf.vote2MeCount ++
+		if rf.vote2MeCount > len(rf.peers)/2 {
+			rf.role = LEADER
+			rf.voteFor = -1
+			rf.vote2MeCount = 0
+			rf.timer.Reset(time.Millisecond * 100)
+		}
 	}
-	if rf.role != CANDIDATE {
-		return
-	}
-	rf.vote2MeCount ++
-	if rf.vote2MeCount > len(rf.peers)/2 {
-		rf.role = LEADER
-		rf.timer.Reset(time.Millisecond * 100)
-	}
+	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 }
 
 func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
 		reply.Success = false
-		return reply
+	} else {
+		reply.Success = true
+		rf.currentTerm = args.Term
+		rf.role = FOLLOWER
+		rf.voteFor = -1
+		rf.vote2MeCount = 0
+		rf.timer.Reset(time.Millisecond * 300)
 	}
-	reply.Success = true
-	rf.currentTerm = args.Term
-	rf.voteFor = -1
-	rf.role = FOLLOWER
-	rf.timer.Reset(time.Millisecond * 300)
+	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	return reply
 }
 
 func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
-
+	log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 }
 
 func (rf *Raft) eventLoop() {
@@ -433,6 +439,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.voteFor = -1
 	rf.vote2MeCount = 0
+	rf.id = rand.Int()
 
 	rf.requestVoteArgsChan = make(chan *RequestVoteArgs)
 	rf.requestVoteReplyChan = make(chan *RequestVoteReply)
