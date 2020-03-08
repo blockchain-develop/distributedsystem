@@ -47,7 +47,7 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
-var id int
+var id int = 1000000
 
 //
 // A Go object implementing a single Raft peer.
@@ -172,6 +172,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if !ok || reply == nil {
 		log.Fatal("append entries fatal")
 	}
+	log.Printf("append entries, args: %v, reply: %v", args, reply)
 }
 
 //
@@ -206,6 +207,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
     if !ok || reply == nil {
     	log.Fatal("Request vote fatal.")
 	}
+	log.Printf("request vote, args: %v, reply: %v", args, reply)
 }
 
 //
@@ -285,6 +287,7 @@ func (rf *Raft) startHeartbeat() {
 }
 
 func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
+	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	reply := &RequestVoteReply{}
 	reply.Term = rf.currentTerm
 	if args.Term < rf.currentTerm {
@@ -301,6 +304,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 }
 
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
+	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	if reply.VoteGranted == true && rf.role == CANDIDATE {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
@@ -314,6 +318,7 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 }
 
 func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
+	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
 		reply.Success = false
