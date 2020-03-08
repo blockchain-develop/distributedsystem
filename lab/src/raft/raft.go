@@ -302,7 +302,7 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 		return
 	}
 	rf.vote2MeCount ++
-	if rf.vote2MeCount > len(rf.peers) {
+	if rf.vote2MeCount > len(rf.peers)/2 {
 		rf.role = LEADER
 		rf.timer.Reset(time.Millisecond * 100)
 	}
