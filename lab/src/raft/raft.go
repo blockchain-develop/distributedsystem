@@ -292,6 +292,12 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	reply.Term = rf.currentTerm
 	if args.Term < rf.currentTerm {
 		reply.VoteGranted = false
+	} else if args.Term > rf.currentTerm {
+		rf.currentTerm = args.Term
+		rf.voteFor = args.CandidateId
+		rf.role = FOLLOWER
+		reply.VoteGranted = true
+		rf.timer.Reset(time.Millisecond * 300)
 	} else if rf.voteFor == -1 {
 		reply.VoteGranted = true
 		rf.voteFor = args.CandidateId
