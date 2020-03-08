@@ -172,7 +172,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if !ok || reply == nil {
 		log.Fatal("append entries fatal")
 	}
-	log.Printf("append entries, args: %v, reply: %v", args, reply)
 }
 
 //
@@ -207,7 +206,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
     if !ok || reply == nil {
     	log.Fatal("Request vote fatal.")
 	}
-	log.Printf("request vote, args: %v, reply: %v", args, reply)
 }
 
 //
@@ -288,6 +286,7 @@ func (rf *Raft) startHeartbeat() {
 
 func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("request vote args: %v", args)
 	reply := &RequestVoteReply{}
 	reply.Term = rf.currentTerm
 	if args.Term < rf.currentTerm {
@@ -311,6 +310,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("request vote reply: %v", reply)
 	if reply.VoteGranted == true && rf.role == CANDIDATE {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
@@ -325,6 +325,7 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 
 func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
 	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("append entries args: %v", args)
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
 		reply.Success = false
@@ -342,6 +343,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 
 func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("append entries reply: %v", reply)
 }
 
 func (rf *Raft) eventLoop() {
