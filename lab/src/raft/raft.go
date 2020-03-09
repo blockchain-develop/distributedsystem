@@ -493,10 +493,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.id = id
 	id ++
 
-	rf.requestVoteArgsChan = make(chan *RequestVoteArgs)
+	rf.requestVoteArgsChan = make(chan *RequestVoteArgs, 1)
 	rf.requestVoteReplyChan = make(chan *RequestVoteReply)
 	rf.requestVoteReplyInternalChan = make(chan *RequestVoteReply)
-	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs)
+	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs, 1)
 	rf.appendEntriesReplyChan = make(chan *AppendEntriesReply)
 	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
 	rf.timer = time.NewTimer(time.Millisecond * 300)
