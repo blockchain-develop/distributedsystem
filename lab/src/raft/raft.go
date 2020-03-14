@@ -47,6 +47,12 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type CommandReply struct {
+	Index            int
+	Term             int
+	IsLeader         bool
+}
+
 
 // use for test
 var id int = 1000000
@@ -65,13 +71,13 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 	// use for test
-	debug                          int
 	id                             int
 
 	role                           int
 	currentTerm                    int
 	voteFor                        int
 	vote2MeCount                   int
+
 	timer                          *time.Timer
 	requestVoteArgsChan            chan *RequestVoteArgs
 	requestVoteReplyChan           chan *RequestVoteReply
@@ -79,6 +85,14 @@ type Raft struct {
 	appendEntriesArgsChan          chan *AppendEntriesArgs
 	appendEntriesReplyChan         chan *AppendEntriesReply
 	appendEntriesReplyInternalChan chan *AppendEntriesReply
+	commandChan                    chan *interface{}
+	commandReplyChan               chan *CommandReply
+
+	logs                           []*Entrie
+	commitIndex                    int
+	lastApplied                    int
+	nextIndexs                     []int
+	matchIndexs                    []int
 }
 
 const (
@@ -86,6 +100,12 @@ const (
 	CANDIDATE
 	LEADER
 )
+
+
+type Entrie struct {
+	Term                int
+	Command             interface{}
+}
 
 // return currentTerm and whether this server
 // believes it is the leader.
@@ -149,7 +169,7 @@ type AppendEntriesArgs struct {
 	LeaderId            int
 	PrevLogIndex        int
 	PrevLogTerm         int
-	Entries             []Entrie
+	Entries             []*Entrie
 	LeaderCommit        int
 }
 
@@ -161,10 +181,6 @@ type AppendEntriesReply struct {
 	// Your data here (2A).
 	Term                 int
 	Success              bool
-}
-
-type Entrie struct {
-
 }
 
 //
@@ -261,9 +277,7 @@ func (rf *Raft) startElection() {
 	rf.currentTerm ++
 	rf.voteFor = rf.me
 	rf.vote2MeCount = 1
-	if rf.debug == 1 {
-		log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	}
+	log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			go func(server int) {
@@ -280,15 +294,18 @@ func (rf *Raft) startElection() {
 }
 
 func (rf *Raft) startHeartbeat() {
-	if rf.debug == 1 {
-		log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("start heartbeat, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	args := &AppendEntriesArgs{
+		Term: rf.currentTerm,
+		LeaderId: rf.me,
 	}
+	rf.broadcastAppendEntries(args)
+}
+
+func (rf *Raft) broadcastAppendEntries(args *AppendEntriesArgs) {
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			go func(server int) {
-				args := &AppendEntriesArgs{
-					Term: rf.currentTerm,
-				}
 				reply := AppendEntriesReply{}
 				rf.sendAppendEntries(server, args, &reply)
 				rf.appendEntriesReplyChan <- &reply
@@ -297,22 +314,46 @@ func (rf *Raft) startHeartbeat() {
 	}
 }
 
-func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
-	if rf.debug == 1 {
-		log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-		log.Printf("request vote args: %v", args)
+func (rf *Raft) startCommand() {
+	log.Printf("start command, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	for i, _ := range rf.peers {
+		if i != rf.me {
+			nextLogIndex := rf.nextIndexs[i]
+			args := &AppendEntriesArgs{
+				Term:         rf.currentTerm,
+				LeaderId:     rf.me,
+				PrevLogIndex: nextLogIndex - 1,
+				PrevLogTerm:  rf.logs[nextLogIndex-1].Term,
+				LeaderCommit: rf.commitIndex,
+			}
+			args.Entries = append(args.Entries, rf.logs[nextLogIndex:]...)
+			go func(server int, args *AppendEntriesArgs) {
+				reply := AppendEntriesReply{}
+				rf.sendAppendEntries(server, args, &reply)
+				rf.nextIndexs[i] += len(args.Entries)
+				rf.appendEntriesReplyChan <- &reply
+			}(i, args)
+		}
 	}
+}
+
+func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
+	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("request vote args: %v", args)
 	reply := &RequestVoteReply{}
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-	} else if args.Term > rf.currentTerm {
+		return reply
+	}
+	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.voteFor = args.CandidateId
 		rf.role = FOLLOWER
 		reply.VoteGranted = true
 		reply.Term = rf.currentTerm
 		rf.timer.Reset(time.Millisecond * 300)
+		return reply
 	} else if rf.voteFor == -1 {
 		rf.voteFor = args.CandidateId
 		reply.VoteGranted = true
@@ -321,18 +362,14 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	} else {
 		reply.VoteGranted = false
 	}
-	if rf.debug == 1 {
-		log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	}
+	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	return reply
 }
 
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
-	if rf.debug == 1 {
-		log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-		log.Printf("request vote reply: %v", reply)
-	}
-	if reply.VoteGranted == true && rf.role == CANDIDATE {
+	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("request vote reply: %v", reply)
+	if reply.VoteGranted == true && reply.Term == rf.currentTerm && rf.role == CANDIDATE {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
 			rf.role = LEADER
@@ -341,43 +378,82 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 			rf.timer.Reset(time.Millisecond * 100)
 		}
 	}
-	if rf.debug == 1 {
-		log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	}
+	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 }
 
 func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
-	if rf.debug == 1 {
-		log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-		log.Printf("append entries args: %v", args)
-	}
+	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("append entries args: %v", args)
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
 		reply.Success = false
-	} else {
-		reply.Success = true
-		rf.currentTerm = args.Term
-		rf.role = FOLLOWER
-		rf.voteFor = -1
-		rf.vote2MeCount = 0
-		rf.timer.Reset(time.Millisecond * 300)
+		return reply
 	}
-	if rf.debug == 1 {
-		log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	// for log replication
+	if len(rf.logs) <= args.PrevLogIndex {
+		reply.Success = false
+		return reply
 	}
+	if rf.logs[args.PrevLogIndex].Term != args.PrevLogTerm {
+		reply.Success = false
+		return reply
+	}
+	rf.logs = rf.logs[args.PrevLogIndex:]
+	rf.logs = append(rf.logs, args.Entries...)
+	if args.LeaderCommit > rf.commitIndex {
+		if args.LeaderCommit < len(rf.logs) - 1 {
+			rf.commitIndex = args.LeaderCommit
+		} else {
+			rf.commitIndex = len(rf.logs) - 1
+		}
+	}
+	// for leader election
+	reply.Success = true
+	rf.currentTerm = args.Term
+	rf.role = FOLLOWER
+	rf.voteFor = -1
+	rf.vote2MeCount = 0
+	rf.timer.Reset(time.Millisecond * 300)
+
+	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	return reply
 }
 
 func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
-	if rf.debug == 1 {
-		log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-		log.Printf("append entries reply: %v", reply)
-	}
+	log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf("append entries reply: %v", reply)
 	// do something
-
-	if rf.debug == 1 {
-		log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	if rf.commitIndex == len(rf.logs) - 1 {
+		// do nothing
+	} else {
+		counter := 1
+		for i, _ := range rf.peers {
+			if i == rf.me {
+				continue
+			}
+			if rf.nextIndexs[i] == (len(rf.logs) - 1) {
+				counter ++
+			}
+		}
+		if counter > len(rf.peers)/2 {
+			rf.commitCommand()
+			rf.commitIndex = len(rf.logs) - 1
+		}
 	}
+
+	log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+}
+
+func (rf *Raft) commitCommand() {
+
+}
+
+func (rf *Raft) handleCommand(command interface{}) {
+	rf.logs = append(rf.logs, &Entrie{
+		Term: rf.currentTerm,
+		Command: command,
+	})
+	rf.startCommand()
 }
 
 func (rf *Raft) eventLoop() {
@@ -414,6 +490,11 @@ func (rf *Raft) eventLoop() {
 				break
 			}
 			rf.handleAppendEntriesReply(appendEntriesReply)
+		case command, ok := <- rf.commandChan:
+			if !ok || command == nil {
+				break
+			}
+			rf.handleCommand(command)
 		}
 	}
 }
@@ -438,7 +519,11 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
-
+	rf.commandChan <- &command
+	commandReplyInternal, ok := <- rf.commandReplyChan
+	if !ok || commandReplyInternal == nil {
+		log.Fatal("start command fatal.")
+	}
 
 	return index, term, isLeader
 }
@@ -475,8 +560,7 @@ func (rf *Raft) killed() bool {
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
 //
-func Make(peers []*labrpc.ClientEnd, me int,
-	persister *Persister, applyCh chan ApplyMsg) *Raft {
+func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
 	rf.peers = peers
 	rf.persister = persister
@@ -488,8 +572,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.voteFor = -1
 	rf.vote2MeCount = 0
 
+	// log replication
+	rf.logs = make([]*Entrie, 0)
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+	rf.nextIndexs = make([]int, len(peers))
+	rf.matchIndexs = make([]int, len(peers))
+
 	// use for test
-	rf.debug = 0
 	rf.id = id
 	id ++
 
@@ -499,6 +589,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs, 1)
 	rf.appendEntriesReplyChan = make(chan *AppendEntriesReply)
 	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
+	rf.commandChan = make(chan *interface{}, 1)
+	rf.commandReplyChan = make(chan *CommandReply)
 	rf.timer = time.NewTimer(time.Millisecond * 300)
 	go rf.eventLoop()
 
