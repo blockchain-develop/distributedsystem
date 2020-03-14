@@ -353,7 +353,6 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 		reply.VoteGranted = true
 		reply.Term = rf.currentTerm
 		rf.timer.Reset(time.Millisecond * 300)
-		return reply
 	} else if rf.voteFor == -1 {
 		rf.voteFor = args.CandidateId
 		reply.VoteGranted = true
@@ -373,8 +372,6 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
 			rf.role = LEADER
-			rf.voteFor = -1
-			rf.vote2MeCount = 0
 			rf.timer.Reset(time.Millisecond * 100)
 		}
 	}
@@ -411,8 +408,6 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	reply.Success = true
 	rf.currentTerm = args.Term
 	rf.role = FOLLOWER
-	rf.voteFor = -1
-	rf.vote2MeCount = 0
 	rf.timer.Reset(time.Millisecond * 300)
 
 	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
