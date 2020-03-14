@@ -190,7 +190,7 @@ func (aea *AppendEntriesArgs) dump() {
 }
 
 func (aer *AppendEntriesReply) dump() {
-	log.Printf("AppendEntriesReply, term: %d, success: %d", aer.Term, aer.Success)
+	log.Printf("AppendEntriesReply, term: %d, success: %v", aer.Term, aer.Success)
 }
 
 //
@@ -235,7 +235,7 @@ func (rva *RequestVoteArgs) dump() {
 }
 
 func (rvr *RequestVoteReply) dump() {
-	log.Printf("RequestVoteReply, term: %d, vote granted: %d", rvr.Term, rvr.VoteGranted)
+	log.Printf("RequestVoteReply, term: %d, vote granted: %v", rvr.Term, rvr.VoteGranted)
 }
 
 //
