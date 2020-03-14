@@ -588,6 +588,7 @@ func (rf *Raft) dumpState(prefix string) {
 	log4MatchIndexs += "]"
 
 	dumpLog += fmt.Sprintf(" next indexs: %s \n match index: %s ", log4NextIndexs, log4MatchIndexs)
+	log.Printf(dumpLog)
 }
 
 //
