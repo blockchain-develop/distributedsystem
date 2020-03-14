@@ -386,6 +386,12 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 		reply.Success = false
 		return reply
 	}
+	// for leader election
+	reply.Success = true
+	rf.currentTerm = args.Term
+	rf.role = FOLLOWER
+	rf.timer.Reset(time.Millisecond * 300)
+
 	// for log replication
 	if len(rf.logs) <= args.PrevLogIndex {
 		reply.Success = false
@@ -404,11 +410,6 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 			rf.commitIndex = len(rf.logs) - 1
 		}
 	}
-	// for leader election
-	reply.Success = true
-	rf.currentTerm = args.Term
-	rf.role = FOLLOWER
-	rf.timer.Reset(time.Millisecond * 300)
 
 	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	return reply
