@@ -18,6 +18,7 @@ package raft
 //
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -183,6 +184,15 @@ type AppendEntriesReply struct {
 	Success              bool
 }
 
+func (aea *AppendEntriesArgs) dump() {
+	log.Printf("AppendEntriesArgs, term: %d, leader id: %d, prev log index: %d, prev log term: %d, leader commit: %d",
+		aea.Term, aea.LeaderId, aea.PrevLogIndex, aea.PrevLogTerm, aea.LeaderCommit)
+}
+
+func (aer *AppendEntriesReply) dump() {
+	log.Printf("AppendEntriesReply, term: %d, success: %d", aer.Term, aer.Success)
+}
+
 //
 // example RequestVote RPC handler.
 //
@@ -217,6 +227,15 @@ type RequestVoteReply struct {
 	// Your data here (2A).
 	Term                 int
 	VoteGranted          bool
+}
+
+func (rva *RequestVoteArgs) dump() {
+	log.Printf("RequestVoteArgs, term: %d, candidate id: %d, last log index: %d, last log term: %d",
+		rva.Term, rva.CandidateId, rva.LastLogIndex, rva.LastLogTerm)
+}
+
+func (rvr *RequestVoteReply) dump() {
+	log.Printf("RequestVoteReply, term: %d, vote granted: %d", rvr.Term, rvr.VoteGranted)
 }
 
 //
@@ -277,7 +296,7 @@ func (rf *Raft) startElection() {
 	rf.currentTerm ++
 	rf.voteFor = rf.me
 	rf.vote2MeCount = 1
-	log.Printf("start election, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("start election")
 
 	lastLogIndex := len(rf.logs)
 	LastlogTerm := -1
@@ -302,7 +321,7 @@ func (rf *Raft) startElection() {
 }
 
 func (rf *Raft) startHeartbeat() {
-	log.Printf("start heartbeat, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("start heartbeat")
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			nextLogIndex := rf.nextIndexs[i]
@@ -336,7 +355,7 @@ func (rf *Raft) startHeartbeat() {
 }
 
 func (rf *Raft) startCommand() {
-	log.Printf("start command, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("start command")
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			nextLogIndex := rf.nextIndexs[i]
@@ -370,8 +389,8 @@ func (rf *Raft) startCommand() {
 }
 
 func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
-	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	log.Printf("request vote args: %v", args)
+	rf.dumpState("bdfore handle request vote request")
+	args.dump()
 	reply := &RequestVoteReply{}
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
@@ -392,13 +411,13 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	} else {
 		reply.VoteGranted = false
 	}
-	log.Printf("handle request vote request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("after handle request vote request")
 	return reply
 }
 
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
-	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	log.Printf("request vote reply: %v", reply)
+	rf.dumpState("before handle request vote reply")
+	reply.dump()
 	if reply.VoteGranted == true && reply.Term == rf.currentTerm && rf.role == CANDIDATE {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
@@ -406,12 +425,12 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 			rf.timer.Reset(time.Millisecond * 100)
 		}
 	}
-	log.Printf("handle request vote reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("after handle request vote reply")
 }
 
 func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
-	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	log.Printf("append entries args: %v", args)
+	rf.dumpState("before handle append entries request")
+	args.dump()
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
 		reply.Success = false
@@ -445,13 +464,13 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 			rf.commitIndex = len(rf.logs)
 		}
 	}
-	log.Printf("handle append entries request, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("after handle append entries request")
 	return reply
 }
 
 func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
-	log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	log.Printf("append entries reply: %v", reply)
+	rf.dumpState("before handle append entries reply")
+	reply.dump()
 	// do something
 	counter := 1
 	for i, _ := range rf.peers {
@@ -465,7 +484,7 @@ func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	if counter > len(rf.peers)/2 {
 		rf.commitIndex += 1
 	}
-	log.Printf("handle append entries reply, id: %d, current term: %d, role: %d, vote for: %d, vote 2 me: %d", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	rf.dumpState("after handle append entries reply")
 }
 
 func (rf *Raft) handleCommand(command *interface{}) {
@@ -549,6 +568,26 @@ func (rf *Raft) commandLoop() {
 			time.Sleep(time.Millisecond * 500)
 		}
 	}
+}
+
+
+func (rf *Raft) dumpState(prefix string) {
+	log.Printf("%s, state: ", prefix)
+	log.Printf(" id: %d \n current term: %d \n role: %d \n vote for: %d \n votes 2 me: %d ", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	log.Printf(" logs: %d \n commit index: %d \n last applied: %d ", len(rf.logs), rf.commitIndex, rf.lastApplied)
+	log4NextIndexs := " next indexs: ["
+	for _, index := range rf.nextIndexs {
+		log4NextIndexs += fmt.Sprintf(" %d ", index)
+	}
+	log4NextIndexs += "]"
+
+	log4MatchIndexs := " match indexs: ["
+	for _, index := range rf.matchIndexs {
+		log4MatchIndexs += fmt.Sprintf(" %d ", index)
+	}
+	log4MatchIndexs += "]"
+
+	log.Printf(" next indexs: %s \n match index: %s ", log4NextIndexs, log4MatchIndexs)
 }
 
 //
