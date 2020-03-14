@@ -325,9 +325,9 @@ func (rf *Raft) startHeartbeat() {
 				reply := AppendEntriesReply{}
 				rf.sendAppendEntries(server, args, &reply)
 				if reply.Success == true && reply.Term == args.Term {
-					rf.nextIndexs[i] += len(args.Entries)
+					rf.nextIndexs[server] += len(args.Entries)
 				} else {
-					rf.nextIndexs[i] --
+					rf.nextIndexs[server] --
 				}
 				rf.appendEntriesReplyChan <- &reply
 			}(i, args)
@@ -359,9 +359,9 @@ func (rf *Raft) startCommand() {
 				reply := AppendEntriesReply{}
 				rf.sendAppendEntries(server, args, &reply)
 				if reply.Success == true && reply.Term == args.Term {
-					rf.nextIndexs[i] += len(args.Entries)
+					rf.nextIndexs[server] += len(args.Entries)
 				} else {
-					rf.nextIndexs[i] --
+					rf.nextIndexs[server] --
 				}
 				rf.appendEntriesReplyChan <- &reply
 			}(i, args)
@@ -419,6 +419,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	}
 	// for leader election
 	reply.Success = true
+	reply.Term = rf.currentTerm
 	rf.currentTerm = args.Term
 	rf.role = FOLLOWER
 	rf.timer.Reset(time.Millisecond * 300)
