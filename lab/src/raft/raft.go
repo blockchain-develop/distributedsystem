@@ -572,9 +572,9 @@ func (rf *Raft) commandLoop() {
 
 
 func (rf *Raft) dumpState(prefix string) {
-	log.Printf("%s, state: ", prefix)
-	log.Printf(" id: %d \n current term: %d \n role: %d \n vote for: %d \n votes 2 me: %d ", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
-	log.Printf(" logs: %d \n commit index: %d \n last applied: %d ", len(rf.logs), rf.commitIndex, rf.lastApplied)
+	dumpLog := fmt.Sprintf("%s, raft state: \n", prefix)
+	dumpLog += fmt.Sprintf(" id: %d \n current term: %d \n role: %d \n vote for: %d \n votes 2 me: %d \n", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	dumpLog += fmt.Sprintf(" logs: %d \n commit index: %d \n last applied: %d \n", len(rf.logs), rf.commitIndex, rf.lastApplied)
 	log4NextIndexs := " next indexs: ["
 	for _, index := range rf.nextIndexs {
 		log4NextIndexs += fmt.Sprintf(" %d ", index)
@@ -587,7 +587,7 @@ func (rf *Raft) dumpState(prefix string) {
 	}
 	log4MatchIndexs += "]"
 
-	log.Printf(" next indexs: %s \n match index: %s ", log4NextIndexs, log4MatchIndexs)
+	dumpLog += fmt.Sprintf(" next indexs: %s \n match index: %s ", log4NextIndexs, log4MatchIndexs)
 }
 
 //
