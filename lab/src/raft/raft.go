@@ -20,6 +20,7 @@ package raft
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -404,7 +405,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 			rf.role = FOLLOWER
 			reply.VoteGranted = true
 			reply.Term = rf.currentTerm
-			rf.timer.Reset(time.Millisecond * 300)
+			rf.timer.Reset(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
 		} else {
 			reply.VoteGranted = false
 		}
@@ -442,7 +443,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	reply.Term = rf.currentTerm
 	rf.currentTerm = args.Term
 	rf.role = FOLLOWER
-	rf.timer.Reset(time.Millisecond * 300)
+	rf.timer.Reset(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
 
 	// for log replication
 	if len(rf.logs) < args.PrevLogIndex {
@@ -520,7 +521,7 @@ func (rf *Raft) eventLoop() {
 			if rf.role == FOLLOWER || rf.role == CANDIDATE {
 				rf.role = CANDIDATE
 				rf.startElection()
-				rf.timer.Reset(time.Millisecond * 300)
+				rf.timer.Reset(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
 			} else {
 				rf.startHeartbeat()
 				rf.timer.Reset(time.Millisecond * 100)
@@ -682,7 +683,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
 	rf.commandChan = make(chan *interface{}, 1)
 	rf.commandReplyChan = make(chan *CommandReply)
-	rf.timer = time.NewTimer(time.Millisecond * 300)
+	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
 	go rf.eventLoop()
 	go rf.commandLoop()
 
