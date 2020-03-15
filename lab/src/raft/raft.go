@@ -75,6 +75,8 @@ type Raft struct {
 	// use for test
 	id                             int
 
+	applyChan                      chan ApplyMsg
+
 	role                           int
 	currentTerm                    int
 	voteFor                        int
@@ -485,6 +487,12 @@ func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	}
 	if counter > len(rf.peers)/2 {
 		rf.commitIndex += 1
+		msg := ApplyMsg{
+			CommandValid: true,
+			Command: rf.logs[rf.commitIndex - 1],
+			CommandIndex: rf.commitIndex,
+		}
+		rf.applyChan <- msg
 	}
 	rf.dumpState("after handle append entries reply")
 }
@@ -656,6 +664,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	rf.applyChan = applyCh
+
 	rf.role = FOLLOWER
 	rf.currentTerm = 0
 	rf.voteFor = -1
