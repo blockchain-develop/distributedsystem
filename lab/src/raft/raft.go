@@ -300,7 +300,7 @@ func (rf *Raft) startElection() {
 	rf.dumpState("start election")
 
 	lastLogIndex := len(rf.logs)
-	LastlogTerm := -1
+	LastlogTerm := 0
 	if lastLogIndex > 0 {
 		LastlogTerm = rf.logs[lastLogIndex - 1].Term
 	}
@@ -327,7 +327,7 @@ func (rf *Raft) startHeartbeat() {
 		if i != rf.me {
 			nextLogIndex := rf.nextIndexs[i]
 			prevLogIndex := nextLogIndex - 1
-			prevLogTerm := -1
+			prevLogTerm := 0
 			if prevLogIndex > 0 {
 				prevLogTerm = rf.logs[prevLogIndex - 1].Term
 			}
@@ -361,7 +361,7 @@ func (rf *Raft) startCommand() {
 		if i != rf.me {
 			nextLogIndex := rf.nextIndexs[i]
 			prevLogIndex := nextLogIndex - 1
-			prevLogTerm := -1
+			prevLogTerm := 0
 			if prevLogIndex > 0 {
 				prevLogTerm = rf.logs[prevLogIndex - 1].Term
 			}
@@ -505,7 +505,7 @@ func (rf *Raft) handleCommand(command *interface{}) {
 		Command: *command,
 	})
 	reply := &CommandReply{
-		Index: len(rf.logs) - 1,
+		Index: len(rf.logs),
 		IsLeader: true,
 		Term: rf.currentTerm,
 	}
