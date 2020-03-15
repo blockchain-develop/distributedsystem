@@ -487,12 +487,6 @@ func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	}
 	if counter > len(rf.peers)/2 {
 		rf.commitIndex += 1
-		msg := ApplyMsg{
-			CommandValid: true,
-			Command: rf.logs[rf.commitIndex - 1],
-			CommandIndex: rf.commitIndex,
-		}
-		rf.applyChan <- msg
 	}
 	rf.dumpState("after handle append entries reply")
 }
@@ -566,7 +560,12 @@ func (rf *Raft) eventLoop() {
 }
 
 func (rf *Raft) applyCommand(index int) {
-
+	msg := ApplyMsg{
+		CommandValid: true,
+		Command: rf.logs[index - 1],
+		CommandIndex: index,
+	}
+	rf.applyChan <- msg
 }
 
 func (rf *Raft) commandLoop() {
