@@ -562,7 +562,7 @@ func (rf *Raft) eventLoop() {
 func (rf *Raft) applyCommand(index int) {
 	msg := ApplyMsg{
 		CommandValid: true,
-		Command: rf.logs[index - 1],
+		Command: rf.logs[index - 1].Command,
 		CommandIndex: index,
 	}
 	rf.applyChan <- msg
