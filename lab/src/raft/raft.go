@@ -105,6 +105,12 @@ const (
 	LEADER
 )
 
+const (
+	ELECTION_TIME        = 1500
+	HEARTBEAT_TIME       = 500
+	APPLYCOMMAND_TIME    = 100
+)
+
 
 type Entrie struct {
 	Term                int
@@ -407,7 +413,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 			rf.role = FOLLOWER
 			reply.VoteGranted = true
 			reply.Term = rf.currentTerm
-			rf.timer.Reset(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
+			rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 		} else {
 			reply.VoteGranted = false
 		}
@@ -425,7 +431,11 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
 			rf.role = LEADER
-			rf.timer.Reset(time.Millisecond * 100)
+			// initialized log replication
+			for i := 0;i < len(rf.peers);i ++ {
+				rf.nextIndexs[i] = rf.commitIndex + 1
+			}
+			rf.timer.Reset(time.Millisecond * HEARTBEAT_TIME)
 		}
 	}
 	rf.dumpState("after handle request vote reply")
@@ -445,7 +455,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	reply.Term = rf.currentTerm
 	rf.currentTerm = args.Term
 	rf.role = FOLLOWER
-	rf.timer.Reset(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
+	rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 
 	// for log replication
 	if len(rf.logs) < args.PrevLogIndex {
@@ -523,10 +533,10 @@ func (rf *Raft) eventLoop() {
 			if rf.role == FOLLOWER || rf.role == CANDIDATE {
 				rf.role = CANDIDATE
 				rf.startElection()
-				rf.timer.Reset(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
+				rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 			} else {
 				rf.startHeartbeat()
-				rf.timer.Reset(time.Millisecond * 100)
+				rf.timer.Reset(time.Millisecond * HEARTBEAT_TIME)
 			}
 		case requestVoteArgs, ok :=  <- rf.requestVoteArgsChan:
 			if !ok || requestVoteArgs == nil {
@@ -574,7 +584,7 @@ func (rf *Raft) commandLoop() {
 			rf.lastApplied ++
 			rf.applyCommand(rf.lastApplied)
 		} else {
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Millisecond * APPLYCOMMAND_TIME)
 		}
 	}
 }
@@ -677,7 +687,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.nextIndexs = make([]int, len(peers))
 	rf.matchIndexs = make([]int, len(peers))
 	for i := 0;i < len(peers);i ++ {
-		rf.nextIndexs[i] = 1
+		rf.nextIndexs[i] = rf.commitIndex + 1
 	}
 
 	// use for test
@@ -692,7 +702,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
 	rf.commandChan = make(chan *interface{}, 1)
 	rf.commandReplyChan = make(chan *CommandReply)
-	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(300 + rand.Int()%300)))
+	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 	go rf.eventLoop()
 	go rf.commandLoop()
 
