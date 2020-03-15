@@ -184,13 +184,13 @@ type AppendEntriesReply struct {
 	Success              bool
 }
 
-func (aea *AppendEntriesArgs) dump() {
-	log.Printf("AppendEntriesArgs, term: %d, leader id: %d, prev log index: %d, prev log term: %d, leader commit: %d",
-		aea.Term, aea.LeaderId, aea.PrevLogIndex, aea.PrevLogTerm, aea.LeaderCommit)
+func (aea *AppendEntriesArgs) dump(raftid int) {
+	log.Printf(" raft: %d, AppendEntriesArgs, term: %d, leader id: %d, prev log index: %d, prev log term: %d, leader commit: %d",
+		raftid, aea.Term, aea.LeaderId, aea.PrevLogIndex, aea.PrevLogTerm, aea.LeaderCommit)
 }
 
-func (aer *AppendEntriesReply) dump() {
-	log.Printf("AppendEntriesReply, term: %d, success: %v", aer.Term, aer.Success)
+func (aer *AppendEntriesReply) dump(raftid int) {
+	log.Printf(" raft: %d, AppendEntriesReply, term: %d, success: %v", raftid, aer.Term, aer.Success)
 }
 
 //
@@ -229,13 +229,13 @@ type RequestVoteReply struct {
 	VoteGranted          bool
 }
 
-func (rva *RequestVoteArgs) dump() {
-	log.Printf("RequestVoteArgs, term: %d, candidate id: %d, last log index: %d, last log term: %d",
-		rva.Term, rva.CandidateId, rva.LastLogIndex, rva.LastLogTerm)
+func (rva *RequestVoteArgs) dump(raftid int) {
+	log.Printf(" raft: %d, RequestVoteArgs, term: %d, candidate id: %d, last log index: %d, last log term: %d",
+		raftid, rva.Term, rva.CandidateId, rva.LastLogIndex, rva.LastLogTerm)
 }
 
-func (rvr *RequestVoteReply) dump() {
-	log.Printf("RequestVoteReply, term: %d, vote granted: %v", rvr.Term, rvr.VoteGranted)
+func (rvr *RequestVoteReply) dump(raftid int) {
+	log.Printf(" raft: %d, RequestVoteReply, term: %d, vote granted: %v", raftid, rvr.Term, rvr.VoteGranted)
 }
 
 //
@@ -390,7 +390,7 @@ func (rf *Raft) startCommand() {
 
 func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	rf.dumpState("bdfore handle request vote request")
-	args.dump()
+	args.dump(rf.id)
 	reply := &RequestVoteReply{}
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
@@ -417,7 +417,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 	rf.dumpState("before handle request vote reply")
-	reply.dump()
+	reply.dump(rf.id)
 	if reply.VoteGranted == true && reply.Term == rf.currentTerm && rf.role == CANDIDATE {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
@@ -430,7 +430,7 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 
 func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply {
 	rf.dumpState("before handle append entries request")
-	args.dump()
+	args.dump(rf.id)
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
 		reply.Success = false
@@ -470,7 +470,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 
 func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	rf.dumpState("before handle append entries reply")
-	reply.dump()
+	reply.dump(rf.id)
 	// do something
 	counter := 1
 	for i, _ := range rf.peers {
@@ -572,8 +572,8 @@ func (rf *Raft) commandLoop() {
 
 
 func (rf *Raft) dumpState(prefix string) {
-	dumpLog := fmt.Sprintf("%s, raft state: \n", prefix)
-	dumpLog += fmt.Sprintf(" id: %d \n current term: %d \n role: %d \n vote for: %d \n votes 2 me: %d \n", rf.id, rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
+	dumpLog := fmt.Sprintf(" raft: %d, %s, raft state: \n", rf.id, prefix)
+	dumpLog += fmt.Sprintf(" current term: %d \n role: %d \n vote for: %d \n votes 2 me: %d \n", rf.currentTerm, rf.role, rf.voteFor, rf.vote2MeCount)
 	dumpLog += fmt.Sprintf(" logs: %d \n commit index: %d \n last applied: %d \n", len(rf.logs), rf.commitIndex, rf.lastApplied)
 	log4NextIndexs := " next indexs: ["
 	for _, index := range rf.nextIndexs {
