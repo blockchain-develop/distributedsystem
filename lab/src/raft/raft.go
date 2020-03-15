@@ -345,7 +345,7 @@ func (rf *Raft) startHeartbeat() {
 				rf.sendAppendEntries(server, args, &reply)
 				if reply.Success == true && reply.Term == args.Term {
 					rf.nextIndexs[server] += len(args.Entries)
-				} else {
+				} else if reply.Term > 0 {
 					rf.nextIndexs[server] --
 				}
 				rf.appendEntriesReplyChan <- &reply
