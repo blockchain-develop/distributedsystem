@@ -379,7 +379,7 @@ func (rf *Raft) startCommand() {
 				rf.sendAppendEntries(server, args, &reply)
 				if reply.Success == true && reply.Term == args.Term {
 					rf.nextIndexs[server] += len(args.Entries)
-				} else {
+				} else if reply.Term > 0 {
 					rf.nextIndexs[server] --
 				}
 				rf.appendEntriesReplyChan <- &reply
@@ -433,6 +433,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	args.dump(rf.id)
 	reply := &AppendEntriesReply{}
 	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
 		reply.Success = false
 		return reply
 	}
