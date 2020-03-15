@@ -386,10 +386,12 @@ func (rf *Raft) startCommand() {
 			go func(server int, args *AppendEntriesArgs) {
 				reply := AppendEntriesReply{}
 				rf.sendAppendEntries(server, args, &reply)
-				if reply.Success == true && reply.Term == args.Term {
-					rf.nextIndexs[server] += len(args.Entries)
-				} else if reply.Term > 0 {
-					rf.nextIndexs[server] --
+				if reply.Term == args.Term {
+					if reply.Success == true {
+						rf.nextIndexs[server] += len(args.Entries)
+					} else {
+						rf.nextIndexs[server] --
+					}
 				}
 				rf.appendEntriesReplyChan <- &reply
 			}(i, args)
@@ -427,6 +429,10 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 	rf.dumpState("before handle request vote reply")
 	reply.dump(rf.id)
+	if reply.Term > rf.currentTerm {
+		rf.currentTerm = reply.Term
+		rf.role = FOLLOWER
+	}
 	if reply.VoteGranted == true && reply.Term == rf.currentTerm && rf.role == CANDIDATE {
 		rf.vote2MeCount ++
 		if rf.vote2MeCount > len(rf.peers)/2 {
@@ -451,10 +457,10 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 		return reply
 	}
 	// for leader election
-	reply.Success = true
-	reply.Term = rf.currentTerm
 	rf.currentTerm = args.Term
 	rf.role = FOLLOWER
+	reply.Success = true
+	reply.Term = rf.currentTerm
 	rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 
 	// for log replication
@@ -486,6 +492,11 @@ func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	rf.dumpState("before handle append entries reply")
 	reply.dump(rf.id)
 	// do something
+	if reply.Term > rf.currentTerm {
+		rf.currentTerm = reply.Term
+		rf.role = FOLLOWER
+		return
+	}
 	counter := 1
 	for i, _ := range rf.peers {
 		if i == rf.me {
