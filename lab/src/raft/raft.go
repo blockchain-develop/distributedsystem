@@ -554,7 +554,7 @@ func (rf *Raft) handleCommand(command *interface{}) {
 		IsLeader: true,
 		Term: rf.currentTerm,
 	}
-	log.Printf(" raft: %d, start command: %v", rf.id, command)
+	log.Printf(" raft: %d, handle command: %v", rf.id, *command)
 	rf.commandReplyChan <- reply
 	rf.startCommand()
 }
