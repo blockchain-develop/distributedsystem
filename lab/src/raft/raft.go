@@ -63,11 +63,11 @@ var id int = 1000000
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
-	mu        sync.Mutex          // Lock to protect shared access to this peer's state
-	peers     []*labrpc.ClientEnd // RPC end points of all peers
-	persister *Persister          // Object to hold this peer's persisted state
-	me        int                 // this peer's index into peers[]
-	dead      int32               // set by Kill()
+	mu                sync.Mutex          // Lock to protect shared access to this peer's state
+	peers             []*labrpc.ClientEnd // RPC end points of all peers
+	persister         *Persister          // Object to hold this peer's persisted state
+	me                int                 // this peer's index into peers[]
+	dead              int32               // set by Kill()
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
@@ -84,10 +84,10 @@ type Raft struct {
 
 	timer                          *time.Timer
 	requestVoteArgsChan            chan *RequestVoteArgs
-	requestVoteReplyChan           chan *RequestVoteReply
+	requestVoteReplyChan           chan *RequestVoteReplyExt
 	requestVoteReplyInternalChan   chan *RequestVoteReply
 	appendEntriesArgsChan          chan *AppendEntriesArgs
-	appendEntriesReplyChan         chan *AppendEntriesReply
+	appendEntriesReplyChan         chan *AppendEntriesReplyExt
 	appendEntriesReplyInternalChan chan *AppendEntriesReply
 	commandChan                    chan *interface{}
 	commandReplyChan               chan *CommandReply
@@ -193,9 +193,15 @@ type AppendEntriesReply struct {
 	Success              bool
 }
 
+type AppendEntriesReplyExt struct {
+	Reply         *AppendEntriesReply
+	Args          *AppendEntriesArgs
+	Server        int
+}
+
 func (aea *AppendEntriesArgs) dump(raftid int) {
-	log.Printf(" raft: %d, AppendEntriesArgs, term: %d, leader id: %d, prev log index: %d, prev log term: %d, leader commit: %d",
-		raftid, aea.Term, aea.LeaderId, aea.PrevLogIndex, aea.PrevLogTerm, aea.LeaderCommit)
+	log.Printf(" raft: %d, AppendEntriesArgs, term: %d, leader id: %d, prev log index: %d, prev log term: %d, leader commit: %d, entries: %d",
+		raftid, aea.Term, aea.LeaderId, aea.PrevLogIndex, aea.PrevLogTerm, aea.LeaderCommit, len(aea.Entries))
 }
 
 func (aer *AppendEntriesReply) dump(raftid int) {
@@ -236,6 +242,12 @@ type RequestVoteReply struct {
 	// Your data here (2A).
 	Term                 int
 	VoteGranted          bool
+}
+
+type RequestVoteReplyExt struct {
+	Reply         *RequestVoteReply
+	Args          *RequestVoteArgs
+	Server        int
 }
 
 func (rva *RequestVoteArgs) dump(raftid int) {
@@ -321,9 +333,13 @@ func (rf *Raft) startElection() {
 	for i, _ := range rf.peers {
 		if i != rf.me {
 			go func(server int, args *RequestVoteArgs) {
-				reply := RequestVoteReply{}
-				rf.sendRequestVote(server, args, &reply)
-				rf.requestVoteReplyChan <- &reply
+				reply := &RequestVoteReply{}
+				rf.sendRequestVote(server, args, reply)
+				rf.requestVoteReplyChan <- &RequestVoteReplyExt{
+					Reply: reply,
+					Args: args,
+					Server: server,
+				}
 			}(i, args)
 		}
 	}
@@ -350,16 +366,13 @@ func (rf *Raft) startHeartbeat() {
 				args.Entries = append(args.Entries, rf.logs[nextLogIndex-1:]...)
 			}
 			go func(server int, args *AppendEntriesArgs) {
-				reply := AppendEntriesReply{}
-				rf.sendAppendEntries(server, args, &reply)
-				if reply.Term == args.Term {
-					if reply.Success == true {
-						rf.nextIndexs[server] += len(args.Entries)
-					} else {
-						rf.nextIndexs[server] --
-					}
+				reply := &AppendEntriesReply{}
+				rf.sendAppendEntries(server, args, reply)
+				rf.appendEntriesReplyChan <- &AppendEntriesReplyExt{
+					Reply: reply,
+					Args: args,
+					Server: server,
 				}
-				rf.appendEntriesReplyChan <- &reply
 			}(i, args)
 		}
 	}
@@ -386,16 +399,13 @@ func (rf *Raft) startCommand() {
 				args.Entries = append(args.Entries, rf.logs[nextLogIndex-1:]...)
 			}
 			go func(server int, args *AppendEntriesArgs) {
-				reply := AppendEntriesReply{}
-				rf.sendAppendEntries(server, args, &reply)
-				if reply.Term == args.Term {
-					if reply.Success == true {
-						rf.nextIndexs[server] += len(args.Entries)
-					} else {
-						rf.nextIndexs[server] --
-					}
+				reply := &AppendEntriesReply{}
+				rf.sendAppendEntries(server, args, reply)
+				rf.appendEntriesReplyChan <- &AppendEntriesReplyExt {
+					Reply: reply,
+					Args: args,
+					Server: server,
 				}
-				rf.appendEntriesReplyChan <- &reply
 			}(i, args)
 		}
 	}
@@ -434,7 +444,8 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 	return reply
 }
 
-func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
+func (rf *Raft) handleReqeustVoteReply(replyExt *RequestVoteReplyExt) {
+	reply := replyExt.Reply
 	rf.dumpState("before handle request vote reply")
 	reply.dump(rf.id)
 	if reply.Term > rf.currentTerm {
@@ -498,27 +509,27 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	return reply
 }
 
-func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
+func (rf *Raft) handleAppendEntriesReply(replyExt *AppendEntriesReplyExt) {
+	reply := replyExt.Reply
+	args := replyExt.Args
+	server := replyExt.Server
 	rf.dumpState("before handle append entries reply")
 	reply.dump(rf.id)
+	//
+	if reply.Term == args.Term {
+		if reply.Success == true {
+			if args.PrevLogIndex + len(args.Entries) >= rf.nextIndexs[server] {
+				rf.nextIndexs[server] = args.PrevLogIndex + len(args.Entries) + 1
+			}
+		} else {
+			rf.nextIndexs[server] --
+		}
+	}
 	// do something
 	if reply.Term > rf.currentTerm {
 		rf.currentTerm = reply.Term
 		rf.voteFor = -1
 		rf.role = FOLLOWER
-		return
-	}
-	counter := 1
-	for i, _ := range rf.peers {
-		if i == rf.me {
-			continue
-		}
-		if rf.nextIndexs[i] > rf.commitIndex + 1 {
-			counter ++
-		}
-	}
-	if counter > len(rf.peers)/2 {
-		rf.commitIndex += 1
 	}
 	rf.dumpState("after handle append entries reply")
 }
@@ -601,6 +612,18 @@ func (rf *Raft) applyCommand(index int) {
 
 func (rf *Raft) applyCommandLoop() {
 	for true {
+		counter := 1
+		for i, _ := range rf.peers {
+			if i == rf.me {
+				continue
+			}
+			if rf.nextIndexs[i] > rf.commitIndex + 1 {
+				counter ++
+			}
+		}
+		if counter > len(rf.peers)/2 {
+			rf.commitIndex += 1
+		}
 		if rf.commitIndex > rf.lastApplied {
 			rf.lastApplied ++
 			rf.applyCommand(rf.lastApplied)
@@ -716,10 +739,10 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	id ++
 
 	rf.requestVoteArgsChan = make(chan *RequestVoteArgs, 1)
-	rf.requestVoteReplyChan = make(chan *RequestVoteReply)
+	rf.requestVoteReplyChan = make(chan *RequestVoteReplyExt)
 	rf.requestVoteReplyInternalChan = make(chan *RequestVoteReply)
 	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs, 1)
-	rf.appendEntriesReplyChan = make(chan *AppendEntriesReply)
+	rf.appendEntriesReplyChan = make(chan *AppendEntriesReplyExt)
 	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
 	rf.commandChan = make(chan *interface{}, 1)
 	rf.commandReplyChan = make(chan *CommandReply)
