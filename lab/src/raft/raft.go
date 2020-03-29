@@ -410,21 +410,18 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 		reply.VoteGranted = false
 		return reply
 	}
-	if args.Term > rf.currentTerm || rf.voteFor == -1 {
-		if args.LastLogIndex >= len(rf.logs) {
-			rf.currentTerm = args.Term
-			rf.voteFor = args.CandidateId
-			rf.role = FOLLOWER
-			reply.VoteGranted = true
-			reply.Term = rf.currentTerm
-			rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
-		} else {
-			rf.currentTerm = args.Term
-			rf.voteFor = -1
-			rf.role = FOLLOWER
-			reply.Term = args.Term
-			reply.VoteGranted = false
-		}
+	if args.Term == rf.currentTerm && rf.voteFor != -1 {
+		reply.Term = args.Term
+		reply.VoteGranted = false
+		return reply
+	}
+	if args.LastLogIndex >= len(rf.logs) {
+		rf.currentTerm = args.Term
+		rf.voteFor = args.CandidateId
+		rf.role = FOLLOWER
+		reply.VoteGranted = true
+		reply.Term = rf.currentTerm
+		rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 	} else {
 		rf.currentTerm = args.Term
 		rf.voteFor = -1
@@ -432,6 +429,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 		reply.Term = args.Term
 		reply.VoteGranted = false
 	}
+
 	rf.dumpState("after handle request vote request")
 	return reply
 }
