@@ -498,10 +498,17 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 		reply.Success = false
 		return reply
 	}
-	// todo
-	if len(args.Entries) > 0 {
-		rf.logs = rf.logs[:args.PrevLogIndex]
-		rf.logs = append(rf.logs, args.Entries...)
+	//
+	index := args.PrevLogIndex
+	for _, entrie := range args.Entries {
+		if len(rf.logs) > index {
+			if rf.logs[index].Term != entrie.Term {
+				rf.logs[index] = entrie
+			}
+		} else {
+			rf.logs = append(rf.logs, entrie)
+		}
+		index ++
 	}
 	if args.LeaderCommit > rf.commitIndex {
 		if args.LeaderCommit <= len(rf.logs) {
@@ -527,7 +534,13 @@ func (rf *Raft) handleAppendEntriesReply(replyExt *AppendEntriesReplyExt) {
 				rf.nextIndexs[server] = args.PrevLogIndex + len(args.Entries) + 1
 			}
 		} else {
-			rf.nextIndexs[server] --
+			if rf.nextIndexs[server] > 10 {
+				rf.nextIndexs[server] -= 10
+			} else if rf.nextIndexs[server] > 3 {
+				rf.nextIndexs[server] -= 3
+			}  else {
+				rf.nextIndexs[server] --
+			}
 		}
 	}
 	// do something
