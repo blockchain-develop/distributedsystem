@@ -319,7 +319,7 @@ func (rf *Raft) startElection() {
 	rf.vote2MeCount = 1
 	rf.dumpState("start election")
 
-	lastLogIndex := len(rf.logs)
+	lastLogIndex := rf.commitIndex
 	LastlogTerm := 0
 	if lastLogIndex > 0 {
 		LastlogTerm = rf.logs[lastLogIndex - 1].Term
@@ -425,7 +425,12 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 		reply.VoteGranted = false
 		return reply
 	}
-	if args.LastLogIndex >= len(rf.logs) {
+	lastLogIndex := rf.commitIndex
+	LastlogTerm := 0
+	if lastLogIndex > 0 {
+		LastlogTerm = rf.logs[lastLogIndex - 1].Term
+	}
+	if args.LastLogTerm > LastlogTerm || (args.LastLogTerm == LastlogTerm && args.LastLogIndex >= lastLogIndex) {
 		rf.currentTerm = args.Term
 		rf.voteFor = args.CandidateId
 		rf.role = FOLLOWER
@@ -499,7 +504,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 		rf.logs = append(rf.logs, args.Entries...)
 	}
 	if args.LeaderCommit > rf.commitIndex {
-		if args.LeaderCommit < len(rf.logs) {
+		if args.LeaderCommit <= len(rf.logs) {
 			rf.commitIndex = args.LeaderCommit
 		} else {
 			rf.commitIndex = len(rf.logs)
