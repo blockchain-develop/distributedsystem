@@ -106,8 +106,8 @@ const (
 )
 
 const (
-	ELECTION_TIME        = 1500
-	HEARTBEAT_TIME       = 500
+	ELECTION_TIME        = 300
+	HEARTBEAT_TIME       = 100
 	APPLYCOMMAND_TIME    = 100
 )
 
@@ -574,7 +574,7 @@ func (rf *Raft) handleCommand(command *interface{}) {
 	}
 	log.Printf(" raft: %d, handle command: %v", rf.id, *command)
 	rf.commandReplyChan <- reply
-	rf.startCommand()
+	//rf.startCommand()
 }
 
 func (rf *Raft) eventLoop() {
