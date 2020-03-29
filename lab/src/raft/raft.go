@@ -18,7 +18,9 @@ package raft
 //
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/mit.6.824/lab/src/labgob"
 	"log"
 	"math/rand"
 	"sync"
@@ -143,6 +145,13 @@ func (rf *Raft) persist() {
 	// e.Encode(rf.yyy)
 	// data := w.Bytes()
 	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.voteFor)
+	e.Encode(rf.logs)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 
@@ -166,6 +175,18 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var voteFor int
+	var logs []*Entrie
+	if d.Decode(&currentTerm) != nil || d.Decode(&voteFor) != nil || d.Decode(logs) != nil {
+	  log.Fatalf("readPersist fatal!")
+	} else {
+	  rf.currentTerm = currentTerm
+	  rf.voteFor = voteFor
+	  rf.logs = logs
+	}
 }
 
 
@@ -317,6 +338,7 @@ func (rf *Raft) startElection() {
 	rf.currentTerm ++
 	rf.voteFor = rf.me
 	rf.vote2MeCount = 1
+	rf.persist()
 	rf.dumpState("start election")
 
 	lastLogIndex := rf.commitIndex
@@ -444,7 +466,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 		reply.Term = args.Term
 		reply.VoteGranted = false
 	}
-
+	rf.persist()
 	rf.dumpState("after handle request vote request")
 	return reply
 }
@@ -469,6 +491,7 @@ func (rf *Raft) handleReqeustVoteReply(replyExt *RequestVoteReplyExt) {
 			rf.timer.Reset(time.Millisecond * HEARTBEAT_TIME)
 		}
 	}
+	rf.persist()
 	rf.dumpState("after handle request vote reply")
 }
 
@@ -487,6 +510,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	rf.role = FOLLOWER
 	reply.Success = true
 	reply.Term = rf.currentTerm
+	rf.persist()
 	rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 
 	// for log replication
@@ -517,6 +541,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 			rf.commitIndex = len(rf.logs)
 		}
 	}
+	rf.persist()
 	rf.dumpState("after handle append entries request")
 	return reply
 }
@@ -548,6 +573,7 @@ func (rf *Raft) handleAppendEntriesReply(replyExt *AppendEntriesReplyExt) {
 		rf.currentTerm = reply.Term
 		rf.voteFor = -1
 		rf.role = FOLLOWER
+		rf.persist()
 	}
 	rf.dumpState("after handle append entries reply")
 }
@@ -754,6 +780,9 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 		rf.nextIndexs[i] = rf.commitIndex + 1
 	}
 
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
+
 	// use for test
 	rf.id = id
 	id ++
@@ -769,9 +798,6 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 	go rf.eventLoop()
 	go rf.applyCommandLoop()
-
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
 
 	return rf
 }
