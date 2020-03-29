@@ -20,7 +20,7 @@ package raft
 import (
 	"bytes"
 	"fmt"
-	"github.com/mit.6.824/lab/src/labgob"
+	"../labgob"
 	"log"
 	"math/rand"
 	"sync"
