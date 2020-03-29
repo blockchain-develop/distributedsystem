@@ -352,10 +352,12 @@ func (rf *Raft) startHeartbeat() {
 			go func(server int, args *AppendEntriesArgs) {
 				reply := AppendEntriesReply{}
 				rf.sendAppendEntries(server, args, &reply)
-				if reply.Success == true && reply.Term == args.Term {
-					rf.nextIndexs[server] += len(args.Entries)
-				} else if reply.Term > 0 {
-					rf.nextIndexs[server] --
+				if reply.Term == args.Term {
+					if reply.Success == true {
+						rf.nextIndexs[server] += len(args.Entries)
+					} else {
+						rf.nextIndexs[server] --
+					}
 				}
 				rf.appendEntriesReplyChan <- &reply
 			}(i, args)
@@ -400,7 +402,7 @@ func (rf *Raft) startCommand() {
 }
 
 func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
-	rf.dumpState("bdfore handle request vote request")
+	rf.dumpState("before handle request vote request")
 	args.dump(rf.id)
 	reply := &RequestVoteReply{}
 	if args.Term < rf.currentTerm {
@@ -417,9 +419,17 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 			reply.Term = rf.currentTerm
 			rf.timer.Reset(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 		} else {
+			rf.currentTerm = args.Term
+			rf.voteFor = -1
+			rf.role = FOLLOWER
+			reply.Term = args.Term
 			reply.VoteGranted = false
 		}
 	} else {
+		rf.currentTerm = args.Term
+		rf.voteFor = -1
+		rf.role = FOLLOWER
+		reply.Term = args.Term
 		reply.VoteGranted = false
 	}
 	rf.dumpState("after handle request vote request")
@@ -431,6 +441,7 @@ func (rf *Raft) handleReqeustVoteReply(reply *RequestVoteReply) {
 	reply.dump(rf.id)
 	if reply.Term > rf.currentTerm {
 		rf.currentTerm = reply.Term
+		rf.voteFor = -1
 		rf.role = FOLLOWER
 	}
 	if reply.VoteGranted == true && reply.Term == rf.currentTerm && rf.role == CANDIDATE {
@@ -458,6 +469,7 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	}
 	// for leader election
 	rf.currentTerm = args.Term
+	rf.voteFor = -1
 	rf.role = FOLLOWER
 	reply.Success = true
 	reply.Term = rf.currentTerm
@@ -494,6 +506,7 @@ func (rf *Raft) handleAppendEntriesReply(reply *AppendEntriesReply) {
 	// do something
 	if reply.Term > rf.currentTerm {
 		rf.currentTerm = reply.Term
+		rf.voteFor = -1
 		rf.role = FOLLOWER
 		return
 	}
@@ -533,7 +546,6 @@ func (rf *Raft) handleCommand(command *interface{}) {
 		Term: rf.currentTerm,
 	}
 	rf.commandReplyChan <- reply
-
 	rf.startCommand()
 }
 
@@ -589,7 +601,7 @@ func (rf *Raft) applyCommand(index int) {
 	rf.applyChan <- msg
 }
 
-func (rf *Raft) commandLoop() {
+func (rf *Raft) applyCommandLoop() {
 	for true {
 		if rf.commitIndex > rf.lastApplied {
 			rf.lastApplied ++
@@ -715,7 +727,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.commandReplyChan = make(chan *CommandReply)
 	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 	go rf.eventLoop()
-	go rf.commandLoop()
+	go rf.applyCommandLoop()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
