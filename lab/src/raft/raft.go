@@ -554,6 +554,7 @@ func (rf *Raft) handleCommand(command *interface{}) {
 		IsLeader: true,
 		Term: rf.currentTerm,
 	}
+	log.Printf(" raft: %d, start command: %v", rf.id, command)
 	rf.commandReplyChan <- reply
 	rf.startCommand()
 }
@@ -602,6 +603,7 @@ func (rf *Raft) eventLoop() {
 }
 
 func (rf *Raft) applyCommand(index int) {
+	log.Printf(" raft: %d, apply command, index: %d, command: %v", rf.id, index, rf.logs[index - 1].Command)
 	msg := ApplyMsg{
 		CommandValid: true,
 		Command: rf.logs[index - 1].Command,
