@@ -776,8 +776,13 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.voteFor = -1
 	rf.vote2MeCount = 0
 
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
+
 	// log replication
-	rf.logs = make([]*Entrie, 0)
+	if rf.logs == nil {
+		rf.logs = make([]*Entrie, 0)
+	}
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.nextIndexs = make([]int, len(peers))
@@ -785,9 +790,6 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	for i := 0;i < len(peers);i ++ {
 		rf.nextIndexs[i] = rf.commitIndex + 1
 	}
-
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
 
 	// use for test
 	rf.id = id
