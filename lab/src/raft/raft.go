@@ -513,7 +513,6 @@ func (rf *Raft) handleAppendEntries(args *AppendEntriesArgs) *AppendEntriesReply
 	}
 	// for leader election
 	rf.currentTerm = args.Term
-	rf.voteFor = -1
 	rf.role = FOLLOWER
 	reply.Success = true
 	reply.Term = rf.currentTerm
