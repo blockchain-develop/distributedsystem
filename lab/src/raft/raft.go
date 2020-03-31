@@ -187,7 +187,7 @@ func (rf *Raft) readPersist(data []byte) {
 	if err = d.Decode(&voteFor); err != nil {
 		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
-	if err = d.Decode(logs); err != nil {
+	if err = d.Decode(&logs); err != nil {
 		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
 	rf.currentTerm = currentTerm
@@ -804,6 +804,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.commandChan = make(chan *interface{}, 1)
 	rf.commandReplyChan = make(chan *CommandReply)
 	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
+
+	rf.dumpState("start raft")
 	go rf.eventLoop()
 	go rf.applyCommandLoop()
 
