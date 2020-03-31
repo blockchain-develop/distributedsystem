@@ -693,6 +693,7 @@ func (rf *Raft) applyCommandLoop() {
 		if counter > len(rf.peers)/2 {
 			rf.commitIndex += 1
 		}
+		rf.persist()
 		if rf.commitIndex > rf.lastApplied {
 			rf.lastApplied ++
 			rf.applyCommand(rf.lastApplied)
