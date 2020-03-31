@@ -150,6 +150,7 @@ func (rf *Raft) persist() {
 	e := labgob.NewEncoder(w)
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.voteFor)
+	e.Encode(rf.commitIndex)
 	e.Encode(rf.logs)
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
@@ -180,6 +181,7 @@ func (rf *Raft) readPersist(data []byte) {
 	d := labgob.NewDecoder(r)
 	var currentTerm int
 	var voteFor int
+	var commitIndex int
 	var logs []*Entrie
 	var err error
 	if err = d.Decode(&currentTerm); err != nil {
@@ -188,11 +190,15 @@ func (rf *Raft) readPersist(data []byte) {
 	if err = d.Decode(&voteFor); err != nil {
 		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
+	if err = d.Decode(&commitIndex); err != nil {
+		log.Fatalf("readPersist fatal!, err: %s", err.Error())
+	}
 	if err = d.Decode(&logs); err != nil {
 		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
 	rf.currentTerm = currentTerm
 	rf.voteFor = voteFor
+	rf.commitIndex = commitIndex
 	rf.logs = logs
 }
 
@@ -792,9 +798,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.readPersist(persister.ReadRaftState())
 
 	// log replication
-	if rf.logs == nil {
-		rf.logs = make([]*Entrie, 0)
-	}
+	rf.logs = make([]*Entrie, 0)
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.nextIndexs = make([]int, len(peers))
@@ -802,6 +806,9 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	for i := 0;i < len(peers);i ++ {
 		rf.nextIndexs[i] = rf.commitIndex + 1
 	}
+
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
 
 	// use for test
 	rf.id = id
