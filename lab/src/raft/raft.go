@@ -93,6 +93,7 @@ type Raft struct {
 	appendEntriesReplyInternalChan chan *AppendEntriesReply
 	commandChan                    chan *interface{}
 	commandReplyChan               chan *CommandReply
+	exitChan                       chan bool
 
 	logs                           []*Entrie
 	commitIndex                    int
@@ -605,6 +606,7 @@ func (rf *Raft) handleCommand(command *interface{}) {
 		Term: rf.currentTerm,
 	}
 	log.Printf(" raft: %d, handle command: %v", rf.id, *command)
+	rf.persist()
 	rf.commandReplyChan <- reply
 	//rf.startCommand()
 }
@@ -648,6 +650,12 @@ func (rf *Raft) eventLoop() {
 				break
 			}
 			rf.handleCommand(command)
+		case exit, ok := <- rf.exitChan:
+			if !ok || exit != true {
+				break
+			}
+			rf.timer.Stop()
+			return
 		}
 	}
 }
@@ -664,6 +672,10 @@ func (rf *Raft) applyCommand(index int) {
 
 func (rf *Raft) applyCommandLoop() {
 	for true {
+		z := atomic.LoadInt32(&rf.dead)
+		if z == 1 {
+			return
+		}
 		counter := 1
 		for i, _ := range rf.peers {
 			if i == rf.me {
@@ -744,6 +756,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
+	rf.exitChan <- true
 }
 
 func (rf *Raft) killed() bool {
@@ -803,6 +816,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
 	rf.commandChan = make(chan *interface{}, 1)
 	rf.commandReplyChan = make(chan *CommandReply)
+	rf.exitChan = make(chan bool)
 	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 
 	rf.dumpState("start raft")
