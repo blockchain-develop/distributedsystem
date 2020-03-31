@@ -150,7 +150,6 @@ func (rf *Raft) persist() {
 	e := labgob.NewEncoder(w)
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.voteFor)
-	e.Encode(rf.commitIndex)
 	e.Encode(rf.logs)
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
@@ -188,9 +187,6 @@ func (rf *Raft) readPersist(data []byte) {
 		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
 	if err = d.Decode(&voteFor); err != nil {
-		log.Fatalf("readPersist fatal!, err: %s", err.Error())
-	}
-	if err = d.Decode(&commitIndex); err != nil {
 		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
 	if err = d.Decode(&logs); err != nil {
@@ -354,7 +350,7 @@ func (rf *Raft) startElection() {
 	rf.persist()
 	rf.dumpState("start election")
 
-	lastLogIndex := rf.commitIndex
+	lastLogIndex := len(rf.logs)
 	LastlogTerm := 0
 	if lastLogIndex > 0 {
 		LastlogTerm = rf.logs[lastLogIndex - 1].Term
@@ -460,7 +456,7 @@ func (rf *Raft) handleRequestVote(args *RequestVoteArgs) *RequestVoteReply {
 		reply.VoteGranted = false
 		return reply
 	}
-	lastLogIndex := rf.commitIndex
+	lastLogIndex := len(rf.logs)
 	LastlogTerm := 0
 	if lastLogIndex > 0 {
 		LastlogTerm = rf.logs[lastLogIndex - 1].Term
