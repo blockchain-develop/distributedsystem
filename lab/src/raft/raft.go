@@ -180,13 +180,19 @@ func (rf *Raft) readPersist(data []byte) {
 	var currentTerm int
 	var voteFor int
 	var logs []*Entrie
-	if d.Decode(&currentTerm) != nil || d.Decode(&voteFor) != nil || d.Decode(logs) != nil {
-	  log.Fatalf("readPersist fatal!")
-	} else {
-	  rf.currentTerm = currentTerm
-	  rf.voteFor = voteFor
-	  rf.logs = logs
+	var err error
+	if err = d.Decode(&currentTerm); err != nil {
+		log.Fatalf("readPersist fatal!, err: %s", err.Error())
 	}
+	if err = d.Decode(&voteFor); err != nil {
+		log.Fatalf("readPersist fatal!, err: %s", err.Error())
+	}
+	if err = d.Decode(logs); err != nil {
+		log.Fatalf("readPersist fatal!, err: %s", err.Error())
+	}
+	rf.currentTerm = currentTerm
+	rf.voteFor = voteFor
+	rf.logs = logs
 }
 
 
