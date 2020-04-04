@@ -86,6 +86,7 @@ func InitMapReduce(nmap int, nreduce int,
 	mr.alive = true
 	mr.registerChannel = make(chan string)
 	mr.DoneChannel = make(chan bool)
+	mr.Workers = make(map[string]*WorkerInfo)
 
 	// initialize any additional state here
 	mr.jobChan = make(chan *DoJobExt)
