@@ -49,6 +49,12 @@ type KeyValue struct {
 	Value string
 }
 
+type DoJobExt struct {
+	Worker          string
+	Reply           *DoJobReply
+	Args            *DoJobArgs
+}
+
 type MapReduce struct {
 	nMap            int    // Number of Map jobs
 	nReduce         int    // Number of Reduce jobs
@@ -61,9 +67,13 @@ type MapReduce struct {
 	stats           *list.List
 
 	// Map of registered workers that you need to keep up to date
-	Workers map[string]*WorkerInfo
+	Workers          map[string]*WorkerInfo
 
 	// add any additional state here
+	jobChan          chan *DoJobExt
+
+	MapWorkState     map[int]int
+	ReduceWorkState  map[int]int
 }
 
 func InitMapReduce(nmap int, nreduce int,
@@ -78,6 +88,15 @@ func InitMapReduce(nmap int, nreduce int,
 	mr.DoneChannel = make(chan bool)
 
 	// initialize any additional state here
+	mr.jobChan = make(chan *DoJobExt)
+	mr.MapWorkState = make(map[int]int, 0)
+	for i := 0;i < nmap;i ++ {
+		mr.MapWorkState[i] = 0
+	}
+	mr.ReduceWorkState = make(map[int]int, 0)
+	for i := 0;i < nreduce;i ++ {
+		mr.ReduceWorkState[i] = 0
+	}
 	return mr
 }
 
