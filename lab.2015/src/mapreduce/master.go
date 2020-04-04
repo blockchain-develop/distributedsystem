@@ -43,7 +43,7 @@ func (mr *MapReduce) assignWork(worker string, jobNumber int, jobType JobType, n
 		Reply: &reply,
 	}
 	if ok == false {
-		fmt.Printf("Worker: DoJob error\n", master)
+		fmt.Printf("assign work to Woker: %s error\n", worker)
 	}
 }
 
@@ -89,11 +89,6 @@ func (mr *MapReduce) reduceWorkFinished() bool {
 		}
 	}
 	return true
-}
-
-
-func (mr *MapReduce) checkWorks() {
-
 }
 
 func (mr *MapReduce) RunMaster() *list.List {
