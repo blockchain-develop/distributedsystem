@@ -25,7 +25,7 @@ func Map(value string) *list.List {
 	kva := list.New()
 	for _, w := range words {
 		kva.PushBack(
-			&mapreduce.KeyValue{
+			mapreduce.KeyValue{
 				Key: w,
 				Value: "1",
 			})
