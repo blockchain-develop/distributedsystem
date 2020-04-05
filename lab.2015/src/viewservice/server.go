@@ -160,7 +160,7 @@ func (vs *ViewServer) GetRPCCount() int32 {
 }
 
 func (vs *ViewServer) dumpState(prefix string) {
-	dumpLog := fmt.Sprintf(" %s, view server state: \n")
+	dumpLog := fmt.Sprintf(" %s, view server state: \n", prefix)
 	if len(vs.views) != 0 {
 		view := vs.views[len(vs.views) - 1]
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
