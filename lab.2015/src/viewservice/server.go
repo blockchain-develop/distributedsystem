@@ -38,8 +38,8 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 
-	vs.dumpState("Before Ping")
 	args.dump()
+	vs.dumpState("Before Ping")
 	vs.pings[args.Me] = time.Now().Unix()
 	if len(vs.views) == 0 {
 		vs.views = append(vs.views, &View{
@@ -81,7 +81,18 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			reply.dump()
 			return nil
 		}
-	} else if args.Me == view.Backup {
+	}
+	if view.Backup == "" {
+		vs.views = append(vs.views, &View{
+			Viewnum: view.Viewnum + 1,
+			Primary: view.Primary,
+			Backup:  args.Me,
+		})
+		reply.View = *(vs.views[len(vs.views)-1])
+		reply.dump()
+		return nil
+	}
+	if args.Me == view.Backup {
 		reply.View = *(vs.views[len(vs.views)-1])
 		reply.dump()
 		return nil
