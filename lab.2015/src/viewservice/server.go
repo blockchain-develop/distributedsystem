@@ -93,9 +93,18 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 // server Get() RPC handler.
 //
 func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
-
 	// Your code here.
-
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	if len(vs.views) == 0 {
+		reply.View = View {
+			Viewnum: 0,
+			Primary: "",
+			Backup: "",
+		}
+	} else {
+		reply.View = *(vs.views[len(vs.views)-1])
+	}
 	return nil
 }
 
