@@ -125,11 +125,10 @@ func (mr *MapReduce) RunMaster() *list.List {
 				}
 			}
 			reduceWorkFinished := mr.reduceWorkFinished()
-			if reduceWorkFinished == false {
-				break
-			} else {
+			if reduceWorkFinished == true {
 				finished = true
 			}
+			break
 		}
 		if finished == true {
 			break
