@@ -40,7 +40,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 
 	args.dump()
 	vs.dumpState("Before Ping")
-	vs.pings[args.Me] = time.Now().Unix()
+	vs.pings[args.Me] = time.Now().UnixNano() / 1000000
 	if len(vs.views) == 0 {
 		newView := &View{
 			Viewnum: 1,
@@ -133,10 +133,10 @@ func (vs *ViewServer) tick() {
 	if len(vs.views) == 0 {
 		return
 	}
-	current := time.Now().Unix()
+	current := time.Now().UnixNano()/1000000
 	view := vs.views[len(vs.views) - 1]
 	for k,v := range vs.pings {
-		if current - v > DeadPings {
+		if current - v > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
 			if k == view.Primary {
 				vs.views = append(vs.views, &View{
 					Viewnum: view.Viewnum + 1,
@@ -185,7 +185,7 @@ func (vs *ViewServer) dumpState(prefix string) {
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
 	}
 	dumpLog += fmt.Sprintf(" view server state: %d\n", vs.state)
-	current := time.Now().Unix()
+	current := time.Now().UnixNano() / 1000000
 	pingState := fmt.Sprintf(" current time: %d\n ping record [", current)
 	for k,v := range vs.pings {
 		pingState += fmt.Sprintf(" %s - %d,%d ", k, v, current -v)
