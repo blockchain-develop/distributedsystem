@@ -1,6 +1,8 @@
 package viewservice
 
-import "net"
+import (
+	"net"
+)
 import "net/rpc"
 import "log"
 import "time"
@@ -9,24 +11,74 @@ import "fmt"
 import "os"
 import "sync/atomic"
 
-type ViewServer struct {
-	mu       sync.Mutex
-	l        net.Listener
-	dead     int32 // for testing
-	rpccount int32 // for testing
-	me       string
+const (
+	NO_PRIMARY          = iota
+	ASSIGN_PRIMARY
+	CONFIRM_PRIMARY
+)
 
+type ViewServer struct {
+	mu           sync.Mutex
+	l            net.Listener
+	dead         int32 // for testing
+	rpccount     int32 // for testing
+	me           string
 
 	// Your declarations here.
+	views        []*View
+	pings        map[string]int64
+	state        int
 }
 
 //
 // server Ping RPC handler.
 //
 func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
-
 	// Your code here.
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
 
+	vs.pings[args.Me] = time.Now().Unix()
+	if len(vs.views) == 0 {
+		vs.views = append(vs.views, &View{
+			Viewnum: 1,
+			Primary: args.Me,
+			Backup: "",
+		})
+		vs.state = ASSIGN_PRIMARY
+		reply.View = *(vs.views[len(vs.views) - 1])
+		return nil
+	}
+
+	view := vs.views[len(vs.views) - 1]
+	if view.Primary == "" {
+		vs.views = append(vs.views, &View{
+			Viewnum: view.Viewnum + 1,
+			Primary: args.Me,
+			Backup: view.Backup,
+		})
+		vs.state = ASSIGN_PRIMARY
+		reply.View = *(vs.views[len(vs.views) - 1])
+		return nil
+	}
+	if args.Me == view.Primary {
+		if vs.state == ASSIGN_PRIMARY {
+			vs.views = append(vs.views, &View{
+				Viewnum: view.Viewnum + 1,
+				Primary: view.Primary,
+				Backup:  view.Backup,
+			})
+			vs.state = CONFIRM_PRIMARY
+			reply.View = *(vs.views[len(vs.views)-1])
+			return nil
+		} else {
+			reply.View = *(vs.views[len(vs.views)-1])
+			return nil
+		}
+	} else if args.Me == view.Backup {
+		reply.View = *(vs.views[len(vs.views)-1])
+		return nil
+	}
 	return nil
 }
 
@@ -47,8 +99,34 @@ func (vs *ViewServer) Get(args *GetArgs, reply *GetReply) error {
 // accordingly.
 //
 func (vs *ViewServer) tick() {
-
 	// Your code here.
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+
+	if len(vs.views) == 0 {
+		return
+	}
+
+	current := time.Now().Unix()
+	view := vs.views[len(vs.views) - 1]
+	for k,v := range vs.pings {
+		if current - v > DeadPings {
+			if k == view.Primary {
+				vs.views = append(vs.views, &View{
+					Viewnum: view.Viewnum + 1,
+					Primary: view.Backup,
+					Backup: "",
+				})
+				vs.state = ASSIGN_PRIMARY
+			} else if k == view.Backup {
+				vs.views = append(vs.views, &View{
+					Viewnum: view.Viewnum + 1,
+					Primary: view.Primary,
+					Backup: "",
+				})
+			}
+		}
+	}
 }
 
 //
@@ -77,6 +155,9 @@ func StartServer(me string) *ViewServer {
 	vs := new(ViewServer)
 	vs.me = me
 	// Your vs.* initializations here.
+	vs.views = make([]*View, 0)
+	vs.pings = make(map[string]int64, 0)
+	vs.state = NO_PRIMARY
 
 	// tell net/rpc about our RPC server and handlers.
 	rpcs := rpc.NewServer()
