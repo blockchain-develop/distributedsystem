@@ -42,58 +42,57 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 	vs.dumpState("Before Ping")
 	vs.pings[args.Me] = time.Now().Unix()
 	if len(vs.views) == 0 {
-		vs.views = append(vs.views, &View{
+		newView := &View{
 			Viewnum: 1,
 			Primary: args.Me,
 			Backup: "",
-		})
+		}
+		vs.views = append(vs.views, newView)
 		vs.state = ASSIGN_PRIMARY
-		reply.View = *(vs.views[len(vs.views) - 1])
+		reply.View = *newView
 		reply.dump()
 		return nil
 	}
 
 	view := vs.views[len(vs.views) - 1]
 	if view.Primary == "" {
-		vs.views = append(vs.views, &View{
+		newView := &View{
 			Viewnum: view.Viewnum + 1,
 			Primary: args.Me,
 			Backup: view.Backup,
-		})
+		}
+		vs.views = append(vs.views, newView)
 		vs.state = ASSIGN_PRIMARY
-		reply.View = *(vs.views[len(vs.views) - 1])
+		reply.View = *newView
 		reply.dump()
 		return nil
 	}
 	if args.Me == view.Primary {
 		if vs.state == ASSIGN_PRIMARY {
-			vs.views = append(vs.views, &View{
+			newView := &View{
 				Viewnum: view.Viewnum + 1,
 				Primary: view.Primary,
 				Backup:  view.Backup,
-			})
+			}
+			vs.views = append(vs.views, newView)
 			vs.state = CONFIRM_PRIMARY
-			reply.View = *(vs.views[len(vs.views)-1])
+			reply.View = *newView
 			reply.dump()
 			return nil
 		} else {
-			reply.View = *(vs.views[len(vs.views)-1])
+			reply.View = *view
 			reply.dump()
 			return nil
 		}
 	}
 	if view.Backup == "" {
-		vs.views = append(vs.views, &View{
-			Viewnum: view.Viewnum + 1,
-			Primary: view.Primary,
-			Backup:  args.Me,
-		})
-		reply.View = *(vs.views[len(vs.views)-1])
+		view.Backup = args.Me
+		reply.View = *view
 		reply.dump()
 		return nil
 	}
 	if args.Me == view.Backup {
-		reply.View = *(vs.views[len(vs.views)-1])
+		reply.View = *view
 		reply.dump()
 		return nil
 	}
