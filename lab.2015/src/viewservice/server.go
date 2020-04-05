@@ -38,6 +38,8 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 
+	vs.dumpState("Before Ping")
+	args.dump()
 	vs.pings[args.Me] = time.Now().Unix()
 	if len(vs.views) == 0 {
 		vs.views = append(vs.views, &View{
@@ -47,6 +49,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 		})
 		vs.state = ASSIGN_PRIMARY
 		reply.View = *(vs.views[len(vs.views) - 1])
+		reply.dump()
 		return nil
 	}
 
@@ -59,6 +62,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 		})
 		vs.state = ASSIGN_PRIMARY
 		reply.View = *(vs.views[len(vs.views) - 1])
+		reply.dump()
 		return nil
 	}
 	if args.Me == view.Primary {
@@ -70,13 +74,16 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			})
 			vs.state = CONFIRM_PRIMARY
 			reply.View = *(vs.views[len(vs.views)-1])
+			reply.dump()
 			return nil
 		} else {
 			reply.View = *(vs.views[len(vs.views)-1])
+			reply.dump()
 			return nil
 		}
 	} else if args.Me == view.Backup {
 		reply.View = *(vs.views[len(vs.views)-1])
+		reply.dump()
 		return nil
 	}
 	return nil
@@ -103,10 +110,10 @@ func (vs *ViewServer) tick() {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 
+	vs.dumpState("Before Tick")
 	if len(vs.views) == 0 {
 		return
 	}
-
 	current := time.Now().Unix()
 	view := vs.views[len(vs.views) - 1]
 	for k,v := range vs.pings {
@@ -127,6 +134,7 @@ func (vs *ViewServer) tick() {
 			}
 		}
 	}
+	vs.dumpState("After Tick")
 }
 
 //
@@ -149,6 +157,34 @@ func (vs *ViewServer) isdead() bool {
 // please don't change this function.
 func (vs *ViewServer) GetRPCCount() int32 {
 	return atomic.LoadInt32(&vs.rpccount)
+}
+
+func (vs *ViewServer) dumpState(prefix string) {
+	dumpLog := fmt.Sprintf(" %s, view server state: \n")
+	if len(vs.views) != 0 {
+		view := vs.views[len(vs.views) - 1]
+		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
+	}
+	dumpLog += fmt.Sprintf(" view server state: %d\n", vs.state)
+	current := time.Now().Unix()
+	pingState := fmt.Sprintf(" current time: %d\n [", current)
+	for k,v := range vs.pings {
+		pingState += fmt.Sprintf(" %s - %d,%d ", k, v, current -v)
+	}
+	pingState += " ]"
+	log.Printf(pingState)
+}
+
+func (args *PingArgs) dump() {
+	log.Printf(" PingArgs, view num: %d, node: %s", args.Viewnum, args.Me)
+}
+
+func (reply *PingReply) dump() {
+	log.Printf(" PingReply, view num: %d, primary: %s, backup: %s", reply.View.Viewnum, reply.View.Primary, reply.View.Backup)
+}
+
+func (view *View) dump() {
+	log.Printf(" View, view num: %d, primary: %s, backup: %s", view.Viewnum, view.Primary, view.Backup)
 }
 
 func StartServer(me string) *ViewServer {
