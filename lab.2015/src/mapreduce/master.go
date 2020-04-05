@@ -1,13 +1,17 @@
 package mapreduce
 
-import "container/list"
+import (
+	"container/list"
+	"time"
+)
 import "fmt"
 
 
 type WorkerInfo struct {
-	address string
+	address         string
 	// You can add definitions here.
-	state   int
+	state           int
+	unreachableTime int64
 }
 
 
@@ -43,7 +47,7 @@ func (mr *MapReduce) assignWork(worker string, jobNumber int, jobType JobType, n
 		Reply: &reply,
 	}
 	if ok == false {
-		fmt.Printf("assign work to Woker: %s error\n", worker)
+		fmt.Printf("assign work to Woker %s error.\n", worker)
 	}
 }
 
@@ -53,7 +57,16 @@ func (mr *MapReduce) getIdleWoker() *WorkerInfo {
 			return worker
 		}
 	}
-	return nil
+	older := time.Now().Unix()
+	var oldWorker *WorkerInfo
+	oldWorker = nil
+	for _, worker := range mr.Workers {
+		if worker.state == 2 && worker.unreachableTime < older {
+			oldWorker = worker
+			older = worker.unreachableTime
+		}
+	}
+	return oldWorker
 }
 
 func (mr *MapReduce) getUnhandleMapWork() int {
@@ -146,19 +159,23 @@ func (mr *MapReduce) RunMaster() *list.List {
 			if !ok {
 				break
 			}
-			mr.Workers[doJobExt.Worker].state = 0
+			worker := mr.Workers[doJobExt.Worker]
 			if doJobExt.Reply.OK == false {
 				if doJobExt.Args.Operation == Map {
 					mr.MapWorkState[doJobExt.Args.JobNumber] = 0
 				} else {
 					mr.ReduceWorkState[doJobExt.Args.JobNumber] = 0
 				}
+				worker.state = 2
+				worker.unreachableTime = time.Now().Unix()
+
 			} else {
 				if doJobExt.Args.Operation == Map {
 					mr.MapWorkState[doJobExt.Args.JobNumber] = 2
 				} else {
 					mr.ReduceWorkState[doJobExt.Args.JobNumber] = 2
 				}
+				worker.state = 0
 			}
 		}
 	}
