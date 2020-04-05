@@ -176,12 +176,13 @@ func (vs *ViewServer) dumpState(prefix string) {
 	}
 	dumpLog += fmt.Sprintf(" view server state: %d\n", vs.state)
 	current := time.Now().Unix()
-	pingState := fmt.Sprintf(" current time: %d\n [", current)
+	pingState := fmt.Sprintf(" current time: %d\n ping record [", current)
 	for k,v := range vs.pings {
 		pingState += fmt.Sprintf(" %s - %d,%d ", k, v, current -v)
 	}
 	pingState += " ]"
-	log.Printf(pingState)
+	dumpLog += pingState
+	log.Printf(dumpLog)
 }
 
 func (args *PingArgs) dump() {
