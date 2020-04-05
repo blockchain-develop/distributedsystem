@@ -103,6 +103,7 @@ func (mr *MapReduce) RunMaster() *list.List {
 					mr.MapWorkState[unhandleMapWork] = 1
 					idleWoker.state = 1
 					go mr.assignWork(idleWoker.address, unhandleMapWork, Map, mr.nReduce)
+					continue
 				} else {
 					break
 				}
@@ -118,6 +119,7 @@ func (mr *MapReduce) RunMaster() *list.List {
 					mr.ReduceWorkState[unhandleReduceWork] = 1
 					idleWorker.state = 1
 					go mr.assignWork(idleWorker.address, unhandleReduceWork, Reduce, mr.nMap)
+					continue
 				} else {
 					break
 				}
