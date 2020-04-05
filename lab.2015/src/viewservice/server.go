@@ -143,7 +143,6 @@ func (vs *ViewServer) tick() {
 					Primary: view.Backup,
 					Backup: "",
 				})
-				vs.state = ASSIGN_PRIMARY
 			} else if k == view.Backup {
 				vs.views = append(vs.views, &View{
 					Viewnum: view.Viewnum + 1,
