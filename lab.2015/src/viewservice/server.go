@@ -53,8 +53,30 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 		reply.dump()
 		return nil
 	}
-
 	view := vs.views[len(vs.views) - 1]
+	if args.Viewnum == 0 {
+		if args.Me == view.Primary {
+			newView := &View{
+				Viewnum: view.Viewnum + 1,
+				Primary: view.Backup,
+				Backup:  view.Primary,
+			}
+			vs.views = append(vs.views, newView)
+			reply.View = *newView
+			reply.dump()
+			return nil
+		} else if args.Me == view.Backup {
+			newView := &View{
+				Viewnum: view.Viewnum + 1,
+				Primary: view.Primary,
+				Backup:  view.Backup,
+			}
+			vs.views = append(vs.views, newView)
+			reply.View = *newView
+			reply.dump()
+			return nil
+		}
+	}
 	if view.Primary == "" {
 		newView := &View{
 			Viewnum: view.Viewnum + 1,
@@ -86,8 +108,13 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 		}
 	}
 	if view.Backup == "" {
-		view.Backup = args.Me
-		reply.View = *view
+		newView := &View{
+			Viewnum: view.Viewnum + 1,
+			Primary: view.Primary,
+			Backup:  view.Backup,
+		}
+		vs.views = append(vs.views, newView)
+		reply.View = *newView
 		reply.dump()
 		return nil
 	}
@@ -135,22 +162,17 @@ func (vs *ViewServer) tick() {
 	}
 	current := time.Now().UnixNano()/1000000
 	view := vs.views[len(vs.views) - 1]
-	for k,v := range vs.pings {
-		if current - v > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
-			if k == view.Primary {
-				vs.views = append(vs.views, &View{
-					Viewnum: view.Viewnum + 1,
-					Primary: view.Backup,
-					Backup: "",
-				})
-			} else if k == view.Backup {
-				vs.views = append(vs.views, &View{
-					Viewnum: view.Viewnum + 1,
-					Primary: view.Primary,
-					Backup: "",
-				})
-			}
-		}
+	primaryPing, primaryOk := vs.pings[view.Primary]
+	backupPing, backupOk := vs.pings[view.Backup]
+	if !primaryOk && !backupOk {
+		return
+	}
+	if current - primaryPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) && current - backupPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
+		vs.views = append(vs.views, &View{
+			Viewnum: view.Viewnum + 1,
+			Primary: "",
+			Backup: "",
+		})
 	}
 	vs.dumpState("After Tick")
 }
