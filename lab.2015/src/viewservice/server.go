@@ -206,7 +206,7 @@ func (vs *ViewServer) dumpState(prefix string) {
 		view := vs.views[len(vs.views) - 1]
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
 	}
-	dumpLog += fmt.Sprintf(" view confirmed: %d\n", vs.confirmed)
+	dumpLog += fmt.Sprintf(" view confirmed: %v\n", vs.confirmed)
 	current := time.Now().UnixNano() / 1000000
 	pingState := fmt.Sprintf(" current time: %d\n ping record [", current)
 	for k,v := range vs.pings {
