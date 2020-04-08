@@ -156,7 +156,7 @@ func (vs *ViewServer) tick() {
 		return
 	}
 	if current - backupPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
-		view.Backup = vs.getNewBackup(view.Backup, "")
+		view.Backup = vs.getNewBackup(view.Primary, "")
 		return
 	}
 }
