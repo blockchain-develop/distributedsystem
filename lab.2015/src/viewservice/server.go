@@ -152,6 +152,7 @@ func (vs *ViewServer) tick() {
 		return
 	}
 	if current - primaryPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) && vs.confirmed == true {
+		vs.confirmed = false
 		newView := &View{
 			Viewnum: view.Viewnum + 1,
 			Primary: view.Backup,
