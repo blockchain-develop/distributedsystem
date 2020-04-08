@@ -78,6 +78,11 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			reply.View = *newView
 			reply.dump()
 			return nil
+		} else if view.Backup == "" {
+			view.Backup = vs.getNewBackup(view.Primary, "")
+			reply.View = *view
+			reply.dump()
+			return nil
 		} else if args.Me == view.Backup {
 			newView := &View{
 				Viewnum: view.Viewnum + 1,
