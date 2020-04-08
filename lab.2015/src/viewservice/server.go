@@ -11,12 +11,6 @@ import "fmt"
 import "os"
 import "sync/atomic"
 
-const (
-	NO_PRIMARY          = iota
-	ASSIGN_PRIMARY
-	CONFIRM_PRIMARY
-)
-
 type ViewServer struct {
 	mu           sync.Mutex
 	l            net.Listener
@@ -27,7 +21,7 @@ type ViewServer struct {
 	// Your declarations here.
 	views        []*View
 	pings        map[string]int64
-	state        int
+	confirmed    bool
 }
 
 //
@@ -42,24 +36,43 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 	vs.dumpState("Before Ping")
 	vs.pings[args.Me] = time.Now().UnixNano() / 1000000
 	if len(vs.views) == 0 {
+		vs.confirmed = false
 		newView := &View{
 			Viewnum: 1,
 			Primary: args.Me,
 			Backup: "",
 		}
 		vs.views = append(vs.views, newView)
-		vs.state = ASSIGN_PRIMARY
 		reply.View = *newView
 		reply.dump()
 		return nil
 	}
 	view := vs.views[len(vs.views) - 1]
+	if vs.confirmed == false {
+		if args.Me == view.Primary && args.Viewnum == view.Viewnum {
+			vs.confirmed = true
+			newView := &View{
+				Viewnum: view.Viewnum + 1,
+				Primary: view.Primary,
+				Backup:  vs.getNewBackup(view.Primary, ""),
+			}
+			vs.views = append(vs.views, newView)
+			reply.View = *newView
+			reply.dump()
+			return nil
+		} else {
+			reply.View = *view
+			reply.dump()
+			return nil
+		}
+	}
 	if args.Viewnum == 0 {
 		if args.Me == view.Primary {
+			vs.confirmed = false
 			newView := &View{
 				Viewnum: view.Viewnum + 1,
 				Primary: view.Backup,
-				Backup:  view.Primary,
+				Backup:  vs.getNewBackup(view.Backup, ""),
 			}
 			vs.views = append(vs.views, newView)
 			reply.View = *newView
@@ -69,35 +82,9 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			newView := &View{
 				Viewnum: view.Viewnum + 1,
 				Primary: view.Primary,
-				Backup:  view.Backup,
+				Backup:  vs.getNewBackup(view.Primary, ""),
 			}
 			vs.views = append(vs.views, newView)
-			reply.View = *newView
-			reply.dump()
-			return nil
-		}
-	}
-	if view.Primary == "" {
-		newView := &View{
-			Viewnum: view.Viewnum + 1,
-			Primary: args.Me,
-			Backup: view.Backup,
-		}
-		vs.views = append(vs.views, newView)
-		vs.state = ASSIGN_PRIMARY
-		reply.View = *newView
-		reply.dump()
-		return nil
-	}
-	if args.Me == view.Primary {
-		if vs.state == ASSIGN_PRIMARY {
-			newView := &View{
-				Viewnum: view.Viewnum + 1,
-				Primary: view.Primary,
-				Backup:  view.Backup,
-			}
-			vs.views = append(vs.views, newView)
-			vs.state = CONFIRM_PRIMARY
 			reply.View = *newView
 			reply.dump()
 			return nil
@@ -108,21 +95,13 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 		}
 	}
 	if view.Backup == "" {
-		newView := &View{
-			Viewnum: view.Viewnum + 1,
-			Primary: view.Primary,
-			Backup:  view.Backup,
-		}
-		vs.views = append(vs.views, newView)
-		reply.View = *newView
-		reply.dump()
-		return nil
-	}
-	if args.Me == view.Backup {
+		view.Backup = vs.getNewBackup(view.Primary, "")
 		reply.View = *view
 		reply.dump()
 		return nil
 	}
+	reply.View = *view
+	reply.dump()
 	return nil
 }
 
@@ -167,14 +146,36 @@ func (vs *ViewServer) tick() {
 	if !primaryOk && !backupOk {
 		return
 	}
-	if current - primaryPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) && current - backupPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
-		vs.views = append(vs.views, &View{
+	if current - primaryPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) && vs.confirmed == true {
+		newView := &View{
 			Viewnum: view.Viewnum + 1,
-			Primary: "",
-			Backup: "",
-		})
+			Primary: view.Backup,
+			Backup:  vs.getNewBackup(view.Backup, ""),
+		}
+		vs.views = append(vs.views, newView)
+		return
 	}
-	vs.dumpState("After Tick")
+	if current - backupPing > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
+		view.Backup = vs.getNewBackup(view.Backup, "")
+		return
+	}
+}
+
+func (vs *ViewServer) getNewBackup(one string, two string) string {
+	t := int64(0)
+	m := ""
+	for k,v := range vs.pings {
+		if k != one && k != two && v > t {
+			t = v
+			m = k
+		}
+	}
+	current := time.Now().UnixNano()/1000000
+	if current - t > DeadPings * (PingInterval.Nanoseconds() / 1000000) {
+		return ""
+	} else {
+		return m
+	}
 }
 
 //
@@ -200,12 +201,12 @@ func (vs *ViewServer) GetRPCCount() int32 {
 }
 
 func (vs *ViewServer) dumpState(prefix string) {
-	dumpLog := fmt.Sprintf(" %s, view server state: \n", prefix)
+	dumpLog := fmt.Sprintf(" View server state, %s: \n", prefix)
 	if len(vs.views) != 0 {
 		view := vs.views[len(vs.views) - 1]
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
 	}
-	dumpLog += fmt.Sprintf(" view server state: %d\n", vs.state)
+	dumpLog += fmt.Sprintf(" view confirmed: %d\n", vs.confirmed)
 	current := time.Now().UnixNano() / 1000000
 	pingState := fmt.Sprintf(" current time: %d\n ping record [", current)
 	for k,v := range vs.pings {
@@ -234,7 +235,7 @@ func StartServer(me string) *ViewServer {
 	// Your vs.* initializations here.
 	vs.views = make([]*View, 0)
 	vs.pings = make(map[string]int64, 0)
-	vs.state = NO_PRIMARY
+	vs.confirmed = false
 
 	// tell net/rpc about our RPC server and handlers.
 	rpcs := rpc.NewServer()
