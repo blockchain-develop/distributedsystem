@@ -15,6 +15,12 @@ const (
 	BACKUP
 )
 
+const (
+	REQUEST            = iota
+	HANDLING
+	HANDLED
+)
+
 // Put or Append
 type PutAppendArgs struct {
 	Key   string

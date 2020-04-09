@@ -14,7 +14,10 @@ import "os"
 import "syscall"
 import "math/rand"
 
-
+type RequestState struct {
+	number         int
+	state          int
+}
 
 type PBServer struct {
 	mu         sync.Mutex
@@ -28,7 +31,7 @@ type PBServer struct {
 	data       map[string]string
 	state      int
 	synced     bool
-	requests   map[string]int
+	requests   map[string]*RequestState
 	debug      bool
 }
 
@@ -62,8 +65,9 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	// Your code here.
 	args.dump(pb.me, "", pb.debug)
-	if pb.isDuplicate(args) == true {
-		return fmt.Errorf("duplicate request.")
+	err := pb.requestState(args)
+	if err != nil{
+		return err
 	}
 	for true {
 		pb.mu.Lock()
@@ -79,10 +83,13 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 			pb.mu.Unlock()
 			return fmt.Errorf("primary is not confirmed.")
 		}
-		pb.requests[args.From] = args.Number
+		reqeustState := pb.requests[args.From]
+		reqeustState.number = args.Number
+		reqeustState.state = HANDLING
 		if backup == "" {
 			pb.acceptValue(args.Key, args.Value, args.Op)
 			reply.Err = OK
+			reqeustState.state = HANDLED
 			pb.mu.Unlock()
 			return nil
 		}
@@ -90,6 +97,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		if syncReply != nil && syncReply.Err == OK {
 			pb.acceptValue(args.Key, args.Value, args.Op)
 			reply.Err = OK
+			reqeustState.state = HANDLED
 			pb.mu.Unlock()
 			return nil
 		}
@@ -167,14 +175,27 @@ func (pb *PBServer) acceptValue(key string, value string, op string) {
 	}
 }
 
-func (pb *PBServer) isDuplicate(args *PutAppendArgs) bool {
+func (pb *PBServer) requestState(args *PutAppendArgs) error {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
-	number, ok := pb.requests[args.From]
-	if ok && number == args.Number {
-		return true
+	state, ok := pb.requests[args.From]
+	if !ok {
+		state = &RequestState{
+			number: -1,
+			state: 0,
+		}
+		pb.requests[args.From] = state
 	}
-	return false
+	if state.number > args.Number {
+		return fmt.Errorf("request has handled.")
+	}
+	if state.state == HANDLING {
+		return fmt.Errorf("request is handling.")
+	}
+	if state.number == args.Number {
+		return fmt.Errorf("request has handled.")
+	}
+	return nil
 }
 
 //
@@ -213,7 +234,7 @@ func (pb *PBServer) tick() {
 		if pb.view.Primary == pb.me {
 			if pb.state == ASSIGN_PRIMARY {
 				pb.synced = false
-				pb.requests = make(map[string]int, 0)
+				pb.requests = make(map[string]*RequestState, 0)
 				pb.state = CONFIRM_PRIMARY
 			}
 			if pb.synced == false {
@@ -314,7 +335,7 @@ func StartServer(vshost string, me string) *PBServer {
 	pb.state = IDLE
 	pb.synced = false
 	pb.debug = true
-	pb.requests = make(map[string]int)
+	pb.requests = make(map[string]*RequestState)
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(pb)
