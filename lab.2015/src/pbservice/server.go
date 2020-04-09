@@ -50,7 +50,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	// Your code here.
-	log.Printf(" PBServer, PutAppend, %s", pb.me)
+	log.Printf(" PBServer, PutAppend, %s, from: %s, number: %d, key: %s, value: %s, op: %s", pb.me, args.From, args.Number, args.Key, args.Value, args.Op)
 	for true {
 		pb.mu.Lock()
 		number, ok := pb.requests[args.From]
