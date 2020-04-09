@@ -45,7 +45,7 @@ type GetReply struct {
 
 // Your RPC definitions here.
 type CopyArgs struct {
-	data   map[string]string
+	Data   map[string]string
 }
 
 type CopyReply struct {

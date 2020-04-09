@@ -113,7 +113,7 @@ func (pb *PBServer) CopySync(args *CopyArgs, reply *CopyReply) error {
 		reply.Err = ErrWrongServer
 		return fmt.Errorf("i am not backup.")
 	}
-	pb.data = args.data
+	pb.data = args.Data
 	pb.synced = true
 	reply.Err = OK
 	return nil
@@ -131,7 +131,7 @@ func (pb *PBServer) syncPutAppend(node string, args *PutAppendArgs) *PutAppendRe
 
 func (pb *PBServer) syncCopy(node string) *CopyReply {
 	args := &CopyArgs{}
-	args.data = pb.data
+	args.Data = pb.data
 	var reply CopyReply
 	// send an RPC request, wait for the reply.
 	ok := call(node, "PBServer.CopySync", args, &reply)
