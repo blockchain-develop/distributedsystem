@@ -52,13 +52,11 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	// Your code here.
 	args.dump(pb.me, "", pb.debug)
+	if pb.isDuplicate(args) == true {
+		return fmt.Errorf("duplate request.")
+	}
 	for true {
 		pb.mu.Lock()
-		number, ok := pb.requests[args.From]
-		if ok && number == args.Number {
-			pb.mu.Unlock()
-			return fmt.Errorf("duplate request.")
-		}
 		isPrimary := (pb.view.Primary == pb.me)
 		backup := pb.view.Backup
 		if !isPrimary {
@@ -99,9 +97,7 @@ func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) er
 		reply.Err = ErrWrongServer
 		return fmt.Errorf("i am not backup.")
 	}
-	v := pb.data[args.Key]
-	v += args.Value
-	pb.data[args.Key] = v
+	pb.acceptValue(args.Key, args.Value, args.Op)
 	reply.Err = OK
 	return nil
 }
@@ -150,6 +146,16 @@ func (pb *PBServer) acceptValue(key string, value string, op string) {
 		v += value
 		pb.data[key] = v
 	}
+}
+
+func (pb *PBServer) isDuplicate(args *PutAppendArgs) bool {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	number, ok := pb.requests[args.From]
+	if ok && number == args.Number {
+		return true
+	}
+	return false
 }
 
 //
