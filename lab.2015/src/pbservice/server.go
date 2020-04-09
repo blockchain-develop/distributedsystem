@@ -1,7 +1,6 @@
 package pbservice
 
 import (
-	"github.com/Workiva/go-datastructures/threadsafe/err"
 	"net"
 )
 import "fmt"
@@ -141,6 +140,7 @@ func (pb *PBServer) tick() {
 	// Your code here.
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
+	pb.dumpState("Before tick")
 	viewnum := uint(0)
 	if pb.view != nil {
 		viewnum = pb.view.Viewnum
@@ -206,6 +206,16 @@ func (pb *PBServer) setunreliable(what bool) {
 
 func (pb *PBServer) isunreliable() bool {
 	return atomic.LoadInt32(&pb.unreliable) != 0
+}
+
+func (pb *PBServer) dumpState(prefix string) {
+	dumpLog := fmt.Sprintf(" PB Server state, %s: \n", prefix)
+	if pb.view != nil {
+		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", pb.view.Viewnum, pb.view.Primary, pb.view.Backup)
+	}
+	dumpLog += fmt.Sprintf(" server state: %d\n", pb.state)
+	dumpLog += fmt.Sprintf(" server synced: %v\n", pb.synced)
+	log.Printf(dumpLog)
 }
 
 func StartServer(vshost string, me string) *PBServer {
