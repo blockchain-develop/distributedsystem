@@ -1,6 +1,7 @@
 package pbservice
 
 import (
+	"github.com/Workiva/go-datastructures/threadsafe/err"
 	"net"
 )
 import "fmt"
@@ -240,7 +241,7 @@ func StartServer(vshost string, me string) *PBServer {
 					// process the request but force discard of reply.
 					c1 := conn.(*net.UnixConn)
 					f, _ := c1.File()
-					err := syscall.Shutdown(syscall.Handle(f.Fd()), syscall.SHUT_WR)
+					err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
 					if err != nil {
 						fmt.Printf("shutdown: %v\n", err)
 					}
