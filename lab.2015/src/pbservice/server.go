@@ -241,6 +241,12 @@ func (pb *PBServer) tick() {
 				pb.requests = make(map[string]*RequestState, 0)
 				pb.state = CONFIRM_PRIMARY
 			}
+			if newView.Viewnum > pb.view.Viewnum {
+				pb.synced = false
+			}
+			if newView.Backup != pb.view.Backup {
+				pb.synced = false
+			}
 			if pb.synced == false {
 				if newView.Backup != "" {
 					reply := pb.syncCopy(newView.Backup)
