@@ -22,6 +22,7 @@ type ViewServer struct {
 	views        []*View
 	pings        map[string]int64
 	confirmed    bool
+	debug        bool
 }
 
 //
@@ -32,7 +33,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 
-	args.dump()
+	args.dump(vs.debug)
 	vs.dumpState("Ping")
 	vs.pings[args.Me] = time.Now().UnixNano() / 1000000
 	if len(vs.views) == 0 {
@@ -44,7 +45,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 		}
 		vs.views = append(vs.views, newView)
 		reply.View = *newView
-		reply.dump()
+		reply.dump(vs.debug)
 		return nil
 	}
 	view := vs.views[len(vs.views) - 1]
@@ -58,11 +59,11 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			}
 			vs.views = append(vs.views, newView)
 			reply.View = *newView
-			reply.dump()
+			reply.dump(vs.debug)
 			return nil
 		} else {
 			reply.View = *view
-			reply.dump()
+			reply.dump(vs.debug)
 			return nil
 		}
 	}
@@ -76,12 +77,12 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			}
 			vs.views = append(vs.views, newView)
 			reply.View = *newView
-			reply.dump()
+			reply.dump(vs.debug)
 			return nil
 		} else if view.Backup == "" {
 			view.Backup = vs.getNewBackup(view.Primary, "")
 			reply.View = *view
-			reply.dump()
+			reply.dump(vs.debug)
 			return nil
 		} else if args.Me == view.Backup {
 			vs.confirmed = false
@@ -92,22 +93,22 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 			}
 			vs.views = append(vs.views, newView)
 			reply.View = *newView
-			reply.dump()
+			reply.dump(vs.debug)
 			return nil
 		} else {
 			reply.View = *view
-			reply.dump()
+			reply.dump(vs.debug)
 			return nil
 		}
 	}
 	if view.Backup == "" {
 		view.Backup = vs.getNewBackup(view.Primary, "")
 		reply.View = *view
-		reply.dump()
+		reply.dump(vs.debug)
 		return nil
 	}
 	reply.View = *view
-	reply.dump()
+	reply.dump(vs.debug)
 	return nil
 }
 
@@ -208,7 +209,10 @@ func (vs *ViewServer) GetRPCCount() int32 {
 }
 
 func (vs *ViewServer) dumpState(prefix string) {
-	dumpLog := fmt.Sprintf(" ViewServer state, %s: \n", prefix)
+	if vs.debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" ViewServer State, %s: \n", prefix)
 	if len(vs.views) != 0 {
 		view := vs.views[len(vs.views) - 1]
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
@@ -224,16 +228,25 @@ func (vs *ViewServer) dumpState(prefix string) {
 	log.Printf(dumpLog)
 }
 
-func (args *PingArgs) dump() {
-	log.Printf(" PingArgs, view num: %d, node: %s", args.Viewnum, args.Me)
+func (args *PingArgs) dump(debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" ViewServer PingArgs, view num: %d, node: %s", args.Viewnum, args.Me)
 }
 
-func (reply *PingReply) dump() {
-	log.Printf(" PingReply, view num: %d, primary: %s, backup: %s", reply.View.Viewnum, reply.View.Primary, reply.View.Backup)
+func (reply *PingReply) dump(debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" ViewServer PingReply, view num: %d, primary: %s, backup: %s", reply.View.Viewnum, reply.View.Primary, reply.View.Backup)
 }
 
-func (view *View) dump() {
-	log.Printf(" View, view num: %d, primary: %s, backup: %s", view.Viewnum, view.Primary, view.Backup)
+func (view *View) dump(debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" ViewServer View, view num: %d, primary: %s, backup: %s", view.Viewnum, view.Primary, view.Backup)
 }
 
 func StartServer(me string) *ViewServer {
@@ -243,6 +256,7 @@ func StartServer(me string) *ViewServer {
 	vs.views = make([]*View, 0)
 	vs.pings = make(map[string]int64, 0)
 	vs.confirmed = false
+	vs.debug = false
 
 	// tell net/rpc about our RPC server and handlers.
 	rpcs := rpc.NewServer()

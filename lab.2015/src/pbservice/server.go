@@ -29,6 +29,7 @@ type PBServer struct {
 	state      int
 	synced     bool
 	requests   map[string]int
+	debug      bool
 }
 
 
@@ -50,7 +51,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	// Your code here.
-	log.Printf(" PBServer, PutAppend, %s, from: %s, number: %d, key: %s, value: %s, op: %s", pb.me, args.From, args.Number, args.Key, args.Value, args.Op)
+	args.dump(pb.me, "", pb.debug)
 	for true {
 		pb.mu.Lock()
 		number, ok := pb.requests[args.From]
@@ -91,7 +92,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 }
 
 func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) error {
-	log.Printf(" PBServer, PutAppendSync, %s", pb.me)
+	args.dump(pb.me, "Sync", pb.debug)
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 	if pb.view.Backup != pb.me {
@@ -106,7 +107,7 @@ func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) er
 }
 
 func (pb *PBServer) CopySync(args *CopyArgs, reply *CopyReply) error {
-	log.Printf(" PBServer, CopySync, %s", pb.me)
+	args.dump(pb.me, pb.debug)
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 	if pb.view.Backup != pb.me {
@@ -231,6 +232,9 @@ func (pb *PBServer) isunreliable() bool {
 }
 
 func (pb *PBServer) dumpState(prefix string) {
+	if pb.debug == false {
+		return
+	}
 	dumpLog := fmt.Sprintf(" PBServer state, %s, %s: \n", prefix, pb.me)
 	if pb.view != nil {
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", pb.view.Viewnum, pb.view.Primary, pb.view.Backup)
@@ -238,6 +242,20 @@ func (pb *PBServer) dumpState(prefix string) {
 	dumpLog += fmt.Sprintf(" server state: %d\n", pb.state)
 	dumpLog += fmt.Sprintf(" server synced: %v\n", pb.synced)
 	log.Printf(dumpLog)
+}
+
+func (args *PutAppendArgs) dump(me string, prefix string, debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" PBServer, PutAppendArgs, %s, %s, from: %s, number: %d, key: %s, value: %s, op: %s", prefix, me, args.From, args.Number, args.Key, args.Value, args.Op)
+}
+
+func (args *CopyArgs) dump(me string, debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" PBServer, CopyArgs, Sync, %s", me)
 }
 
 func StartServer(vshost string, me string) *PBServer {
@@ -249,6 +267,7 @@ func StartServer(vshost string, me string) *PBServer {
 	pb.view = nil
 	pb.state = IDLE
 	pb.synced = false
+	pb.debug = true
 	pb.requests = make(map[string]int)
 
 	rpcs := rpc.NewServer()
