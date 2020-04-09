@@ -49,6 +49,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	// Your code here.
+	log.Printf(" PBServer, PutAppend, %s", pb.me)
 	for true {
 		pb.mu.Lock()
 		isPrimary := (pb.view.Primary == pb.me)
@@ -82,6 +83,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 }
 
 func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) error {
+	log.Printf(" PBServer, PutAppendSync, %s", pb.me)
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 	if pb.view.Backup != pb.me {
@@ -96,6 +98,7 @@ func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) er
 }
 
 func (pb *PBServer) CopySync(args *CopyArgs, reply *CopyReply) error {
+	log.Printf(" PBServer, CopySync, %s", pb.me)
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 	if pb.view.Backup != pb.me {
@@ -140,7 +143,7 @@ func (pb *PBServer) tick() {
 	// Your code here.
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
-	pb.dumpState("Before tick")
+	pb.dumpState("Tick")
 	viewnum := uint(0)
 	if pb.view != nil {
 		viewnum = pb.view.Viewnum
@@ -209,7 +212,7 @@ func (pb *PBServer) isunreliable() bool {
 }
 
 func (pb *PBServer) dumpState(prefix string) {
-	dumpLog := fmt.Sprintf(" PB Server state, %s: \n", prefix)
+	dumpLog := fmt.Sprintf(" PBServer state, %s, %s: \n", prefix, pb.me)
 	if pb.view != nil {
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", pb.view.Viewnum, pb.view.Primary, pb.view.Backup)
 	}

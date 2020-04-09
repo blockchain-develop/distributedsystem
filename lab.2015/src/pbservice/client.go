@@ -1,6 +1,9 @@
 package pbservice
 
-import "../viewservice"
+import (
+	"../viewservice"
+	"time"
+)
 import "net/rpc"
 import "fmt"
 
@@ -11,6 +14,7 @@ import "math/big"
 type Clerk struct {
 	vs *viewservice.Clerk
 	// Your declarations here
+	primary   string
 }
 
 // this may come in handy.
@@ -25,7 +29,7 @@ func MakeClerk(vshost string, me string) *Clerk {
 	ck := new(Clerk)
 	ck.vs = viewservice.MakeClerk(me, vshost)
 	// Your ck.* initializations here
-
+	ck.primary = ck.vs.Primary()
 	return ck
 }
 
@@ -72,18 +76,56 @@ func call(srv string, rpcname string,
 // says the key doesn't exist (has never been Put().
 //
 func (ck *Clerk) Get(key string) string {
-
 	// Your code here.
-
-	return "???"
+	args := &GetArgs{}
+	args.Key = key
+	var reply GetReply
+	ok := false
+	for ok == false {
+		ok := call(ck.primary, "PBServer.Get", args, &reply)
+		if ok == false {
+			ck.primary = ck.vs.Primary()
+		} else {
+			if reply.Err == OK || reply.Err == ErrNoKey {
+				break
+			} else {
+				ck.primary = ck.vs.Primary()
+			}
+		}
+		time.Sleep(time.Second * 1)
+	}
+	if reply.Err == OK {
+		return reply.Value
+	} else {
+		return ""
+	}
 }
 
 //
 // send a Put or Append RPC
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-
 	// Your code here.
+	args := &PutAppendArgs{}
+	args.Key = key
+	args.Value = value
+	var reply PutAppendReply
+
+	// send an RPC request, wait for the reply.
+	ok := false
+	for ok == false {
+		ok := call(ck.primary, "PBServer.PutAppend", args, &reply)
+		if ok == false {
+			ck.primary = ck.vs.Primary()
+		} else {
+			if reply.Err == OK {
+				break
+			} else {
+				ck.primary = ck.vs.Primary()
+			}
+		}
+		time.Sleep(time.Second * 1)
+	}
 }
 
 //

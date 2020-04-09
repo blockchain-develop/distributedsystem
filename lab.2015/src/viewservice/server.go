@@ -33,7 +33,7 @@ func (vs *ViewServer) Ping(args *PingArgs, reply *PingReply) error {
 	defer vs.mu.Unlock()
 
 	args.dump()
-	vs.dumpState("Before Ping")
+	vs.dumpState("Ping")
 	vs.pings[args.Me] = time.Now().UnixNano() / 1000000
 	if len(vs.views) == 0 {
 		vs.confirmed = false
@@ -141,7 +141,7 @@ func (vs *ViewServer) tick() {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 
-	vs.dumpState("Before Tick")
+	vs.dumpState("Tick")
 	if len(vs.views) == 0 {
 		return
 	}
@@ -208,7 +208,7 @@ func (vs *ViewServer) GetRPCCount() int32 {
 }
 
 func (vs *ViewServer) dumpState(prefix string) {
-	dumpLog := fmt.Sprintf(" View server state, %s: \n", prefix)
+	dumpLog := fmt.Sprintf(" ViewServer state, %s: \n", prefix)
 	if len(vs.views) != 0 {
 		view := vs.views[len(vs.views) - 1]
 		dumpLog += fmt.Sprintf(" latest view, view num: %d, primary: %s, backup: %s\n", view.Viewnum, view.Primary, view.Backup)
