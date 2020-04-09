@@ -28,6 +28,7 @@ type PBServer struct {
 	data       map[string]string
 	state      int
 	synced     bool
+	requests   map[string]int
 }
 
 
@@ -52,6 +53,11 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	log.Printf(" PBServer, PutAppend, %s", pb.me)
 	for true {
 		pb.mu.Lock()
+		number, ok := pb.requests[args.From]
+		if ok && number == args.Number {
+			pb.mu.Unlock()
+			return fmt.Errorf("duplate request.")
+		}
 		isPrimary := (pb.view.Primary == pb.me)
 		backup := pb.view.Backup
 		if !isPrimary {
@@ -59,19 +65,21 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 			pb.mu.Unlock()
 			return fmt.Errorf("i am not primary.")
 		}
+		if pb.state != CONFIRM_PRIMARY {
+			reply.Err = ErrWrongServer
+			pb.mu.Unlock()
+			return fmt.Errorf("primary is not confirmed.")
+		}
+		pb.requests[args.From] = args.Number
 		if backup == "" {
-			v := pb.data[args.Key]
-			v += args.Value
-			pb.data[args.Key] = v
+			pb.acceptValue(args.Key, args.Value, args.Op)
 			reply.Err = OK
 			pb.mu.Unlock()
 			return nil
 		}
 		reply := pb.syncPutAppend(pb.view.Backup, args)
 		if reply != nil && reply.Err == OK {
-			v := pb.data[args.Key]
-			v += args.Value
-			pb.data[args.Key] = v
+			pb.acceptValue(args.Key, args.Value, args.Op)
 			reply.Err = OK
 			pb.mu.Unlock()
 			return nil
@@ -133,6 +141,16 @@ func (pb *PBServer) syncCopy(node string) *CopyReply {
 	return &reply
 }
 
+func (pb *PBServer) acceptValue(key string, value string, op string) {
+	if op == "Put" {
+		pb.data[key] = value
+	} else if op == "Append" {
+		v := pb.data[key]
+		v += value
+		pb.data[key] = value
+	}
+}
+
 //
 // ping the viewserver periodically.
 // if view changed:
@@ -169,6 +187,7 @@ func (pb *PBServer) tick() {
 		if pb.view.Primary == pb.me {
 			if pb.state == ASSIGN_PRIMARY {
 				pb.synced = false
+				pb.requests = make(map[string]int, 0)
 				pb.state = CONFIRM_PRIMARY
 			}
 			if pb.synced == false {
@@ -230,6 +249,7 @@ func StartServer(vshost string, me string) *PBServer {
 	pb.view = nil
 	pb.state = IDLE
 	pb.synced = false
+	pb.requests = make(map[string]int)
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(pb)

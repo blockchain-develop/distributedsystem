@@ -15,6 +15,8 @@ type Clerk struct {
 	vs *viewservice.Clerk
 	// Your declarations here
 	primary   string
+	number    int
+	me        string
 }
 
 // this may come in handy.
@@ -30,6 +32,8 @@ func MakeClerk(vshost string, me string) *Clerk {
 	ck.vs = viewservice.MakeClerk(me, vshost)
 	// Your ck.* initializations here
 	ck.primary = ck.vs.Primary()
+	ck.number = 1
+	ck.me = me
 	return ck
 }
 
@@ -109,6 +113,10 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	args := &PutAppendArgs{}
 	args.Key = key
 	args.Value = value
+	args.From = ck.me
+	args.Number = ck.number
+	args.Op = op
+	ck.number ++
 	var reply PutAppendReply
 
 	// send an RPC request, wait for the reply.
