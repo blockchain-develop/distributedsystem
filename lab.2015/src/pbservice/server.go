@@ -78,8 +78,8 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 			pb.mu.Unlock()
 			return nil
 		}
-		reply := pb.syncPutAppend(pb.view.Backup, args)
-		if reply != nil && reply.Err == OK {
+		syncReply := pb.syncPutAppend(pb.view.Backup, args)
+		if syncReply != nil && syncReply.Err == OK {
 			pb.acceptValue(args.Key, args.Value, args.Op)
 			reply.Err = OK
 			pb.mu.Unlock()
@@ -286,14 +286,14 @@ func (args *GetArgs) dump(me string, debug bool) {
 	if debug == false {
 		return
 	}
-	log.Printf(" PBServer, GetArgs, %s", me)
+	log.Printf(" PBServer, GetArgs, %s, key: %s", me, args.Key)
 }
 
 func (reply *GetReply) dump(me string, debug bool) {
 	if debug == false {
 		return
 	}
-	log.Printf(" PBServer, GetReply, %s", me)
+	log.Printf(" PBServer, GetReply, %s, result: %s, value: %s", me, reply.Err, reply.Value)
 }
 
 func StartServer(vshost string, me string) *PBServer {
