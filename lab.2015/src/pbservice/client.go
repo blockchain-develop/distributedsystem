@@ -128,7 +128,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		} else {
 			if reply.Err == OK {
 				break
-			} else {
+			} else if reply.Err == ErrWrongServer {
 				ck.primary = ck.vs.Primary()
 			}
 		}

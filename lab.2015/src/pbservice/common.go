@@ -3,6 +3,7 @@ package pbservice
 const (
 	OK             = "OK"
 	ErrNoKey       = "ErrNoKey"
+	Handling       = "Handling"
 	ErrWrongServer = "ErrWrongServer"
 )
 

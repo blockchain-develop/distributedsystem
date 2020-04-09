@@ -65,8 +65,9 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 	// Your code here.
 	args.dump(pb.me, "", pb.debug)
-	err := pb.requestState(args)
+	err, result := pb.requestState(args)
 	if err != nil{
+		reply.Err = result
 		return err
 	}
 	for true {
@@ -175,7 +176,7 @@ func (pb *PBServer) acceptValue(key string, value string, op string) {
 	}
 }
 
-func (pb *PBServer) requestState(args *PutAppendArgs) error {
+func (pb *PBServer) requestState(args *PutAppendArgs) (error, Err) {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 	state, ok := pb.requests[args.From]
@@ -187,15 +188,15 @@ func (pb *PBServer) requestState(args *PutAppendArgs) error {
 		pb.requests[args.From] = state
 	}
 	if state.number > args.Number {
-		return fmt.Errorf("request has handled.")
+		return fmt.Errorf("request has handled."), OK
 	}
 	if state.state == HANDLING {
-		return fmt.Errorf("request is handling.")
+		return fmt.Errorf("request is handling."), Handling
 	}
 	if state.number == args.Number {
-		return fmt.Errorf("request has handled.")
+		return fmt.Errorf("request has handled."), OK
 	}
-	return nil
+	return nil, ""
 }
 
 //
