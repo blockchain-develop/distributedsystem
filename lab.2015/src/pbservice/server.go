@@ -38,7 +38,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 	args.dump(pb.me, pb.debug)
-	if pb.view.Primary == pb.me {
+	if pb.view.Primary != pb.me {
 		reply.Err = ErrWrongServer
 		return fmt.Errorf("i am not primary.")
 	}
