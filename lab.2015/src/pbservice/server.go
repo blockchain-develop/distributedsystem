@@ -67,8 +67,11 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	args.dump(pb.me, "", pb.debug)
 	err, result := pb.requestState(args)
 	if err != nil{
-		reply.Err = result
 		return err
+	}
+	if result == OK {
+		reply.Err = result
+		return nil
 	}
 	for true {
 		pb.mu.Lock()
@@ -77,12 +80,12 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		if !isPrimary {
 			reply.Err = ErrWrongServer
 			pb.mu.Unlock()
-			return fmt.Errorf("i am not primary.")
+			return nil
 		}
 		if pb.state != CONFIRM_PRIMARY {
 			reply.Err = ErrWrongServer
 			pb.mu.Unlock()
-			return fmt.Errorf("primary is not confirmed.")
+			return nil
 		}
 		reqeustState := pb.requests[args.From]
 		reqeustState.number = args.Number
@@ -114,7 +117,7 @@ func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) er
 	defer pb.mu.Unlock()
 	if pb.view.Backup != pb.me {
 		reply.Err = ErrWrongServer
-		return fmt.Errorf("i am not backup.")
+		return nil
 	}
 	pb.acceptValue(args.Key, args.Value, args.Op)
 	reply.Err = OK
@@ -127,7 +130,7 @@ func (pb *PBServer) CopySync(args *CopyArgs, reply *CopyReply) error {
 	defer pb.mu.Unlock()
 	if pb.view.Backup != pb.me {
 		reply.Err = ErrWrongServer
-		return fmt.Errorf("i am not backup.")
+		return nil
 	}
 	pb.data = args.Data
 	pb.synced = true
@@ -188,13 +191,13 @@ func (pb *PBServer) requestState(args *PutAppendArgs) (error, Err) {
 		pb.requests[args.From] = state
 	}
 	if state.number > args.Number {
-		return fmt.Errorf("request has handled."), OK
+		return nil, OK
 	}
 	if state.state == HANDLING {
 		return fmt.Errorf("request is handling."), Handling
 	}
 	if state.number == args.Number {
-		return fmt.Errorf("request has handled."), OK
+		return nil, OK
 	}
 	return nil, ""
 }
