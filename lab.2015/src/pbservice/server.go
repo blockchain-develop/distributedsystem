@@ -147,7 +147,7 @@ func (pb *PBServer) acceptValue(key string, value string, op string) {
 	} else if op == "Append" {
 		v := pb.data[key]
 		v += value
-		pb.data[key] = value
+		pb.data[key] = v
 	}
 }
 

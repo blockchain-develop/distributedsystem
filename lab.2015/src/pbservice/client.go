@@ -33,7 +33,7 @@ func MakeClerk(vshost string, me string) *Clerk {
 	// Your ck.* initializations here
 	ck.primary = ck.vs.Primary()
 	ck.number = 1
-	ck.me = me
+	ck.me = fmt.Sprintf("%d", nrand)
 	return ck
 }
 
