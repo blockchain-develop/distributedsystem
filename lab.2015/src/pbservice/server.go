@@ -1,11 +1,13 @@
 package pbservice
 
-import "net"
+import (
+	"net"
+)
 import "fmt"
 import "net/rpc"
 import "log"
 import "time"
-import "viewservice"
+import "../viewservice"
 import "sync"
 import "sync/atomic"
 import "os"
@@ -22,25 +24,111 @@ type PBServer struct {
 	me         string
 	vs         *viewservice.Clerk
 	// Your declarations here.
+	view       *viewservice.View
+	data       map[string]string
+	state      int
+	synced     bool
 }
 
 
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
-
 	// Your code here.
-
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	v,ok := pb.data[args.Key]
+	if !ok {
+		reply.Err = ErrNoKey
+		reply.Value = ""
+	} else {
+		reply.Err = OK
+		reply.Value = v
+	}
 	return nil
 }
 
 
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
-
 	// Your code here.
+	for true {
+		pb.mu.Lock()
+		isPrimary := (pb.view.Primary == pb.me)
+		backup := pb.view.Backup
+		if !isPrimary {
+			reply.Err = ErrWrongServer
+			pb.mu.Unlock()
+			return fmt.Errorf("i am not primary.")
+		}
+		if backup == "" {
+			v := pb.data[args.Key]
+			v += args.Value
+			pb.data[args.Key] = v
+			reply.Err = OK
+			pb.mu.Unlock()
+			return nil
+		}
+		reply := pb.syncPutAppend(pb.view.Backup, args)
+		if reply != nil && reply.Err == OK {
+			v := pb.data[args.Key]
+			v += args.Value
+			pb.data[args.Key] = v
+			reply.Err = OK
+			pb.mu.Unlock()
+			return nil
+		}
+		pb.mu.Unlock()
+		time.Sleep(time.Second * 1)
+	}
+	return fmt.Errorf("this not happen.")
+}
 
-
+func (pb *PBServer) PutAppendSync(args *PutAppendArgs, reply *PutAppendReply) error {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	if pb.view.Backup != pb.me {
+		reply.Err = ErrWrongServer
+		return fmt.Errorf("i am not backup.")
+	}
+	v := pb.data[args.Key]
+	v += args.Value
+	pb.data[args.Key] = v
+	reply.Err = OK
 	return nil
 }
 
+func (pb *PBServer) CopySync(args *CopyArgs, reply *CopyReply) error {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	if pb.view.Backup != pb.me {
+		reply.Err = ErrWrongServer
+		return fmt.Errorf("i am not backup.")
+	}
+	pb.data = args.data
+	pb.synced = true
+	reply.Err = OK
+	return nil
+}
+
+func (pb *PBServer) syncPutAppend(node string, args *PutAppendArgs) *PutAppendReply {
+	var reply PutAppendReply
+	// send an RPC request, wait for the reply.
+	ok := call(node, "PBServer.PutAppendSync", args, &reply)
+	if ok == false {
+		return nil
+	}
+	return &reply
+}
+
+func (pb *PBServer) syncCopy(node string) *CopyReply {
+	args := &CopyArgs{}
+	args.data = pb.data
+	var reply CopyReply
+	// send an RPC request, wait for the reply.
+	ok := call(node, "PBServer.CopySync", args, &reply)
+	if ok == false {
+		return nil
+	}
+	return &reply
+}
 
 //
 // ping the viewserver periodically.
@@ -49,8 +137,49 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 //   manage transfer of state from primary to new backup.
 //
 func (pb *PBServer) tick() {
-
 	// Your code here.
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	viewnum := uint(0)
+	if pb.view != nil {
+		viewnum = pb.view.Viewnum
+	}
+	if pb.state == ASSIGN_PRIMARY && pb.synced == false {
+		return
+	}
+	newView, err := pb.vs.Ping(viewnum)
+	if err != nil {
+		log.Printf("ping err: %s", err.Error())
+		return
+	}
+	if newView.Primary == pb.me {
+		if pb.view == nil || pb.view.Primary != pb.me {
+			pb.state = ASSIGN_PRIMARY
+			pb.view = &newView
+			// first boot
+			if newView.Viewnum == 1 {
+				pb.synced = true
+			}
+			return
+		}
+		if pb.view.Primary == pb.me {
+			if pb.state == ASSIGN_PRIMARY {
+				pb.synced = false
+				pb.state = CONFIRM_PRIMARY
+			}
+			if pb.synced == false {
+				if newView.Backup != "" {
+					reply := pb.syncCopy(newView.Backup)
+					if reply != nil && reply.Err == OK {
+						pb.synced = true
+					}
+				}
+			}
+			pb.view = &newView
+			return
+		}
+	}
+	pb.view = &newView
 }
 
 // tell the server to shut itself down.
@@ -78,12 +207,15 @@ func (pb *PBServer) isunreliable() bool {
 	return atomic.LoadInt32(&pb.unreliable) != 0
 }
 
-
 func StartServer(vshost string, me string) *PBServer {
 	pb := new(PBServer)
 	pb.me = me
 	pb.vs = viewservice.MakeClerk(me, vshost)
 	// Your pb.* initializations here.
+	pb.data = make(map[string]string, 0)
+	pb.view = nil
+	pb.state = IDLE
+	pb.synced = false
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(pb)
@@ -97,7 +229,6 @@ func StartServer(vshost string, me string) *PBServer {
 
 	// please do not change any of the following code,
 	// or do anything to subvert it.
-
 	go func() {
 		for pb.isdead() == false {
 			conn, err := pb.l.Accept()
@@ -109,7 +240,7 @@ func StartServer(vshost string, me string) *PBServer {
 					// process the request but force discard of reply.
 					c1 := conn.(*net.UnixConn)
 					f, _ := c1.File()
-					err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+					err := syscall.Shutdown(syscall.Handle(f.Fd()), syscall.SHUT_WR)
 					if err != nil {
 						fmt.Printf("shutdown: %v\n", err)
 					}

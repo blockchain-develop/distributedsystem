@@ -8,6 +8,13 @@ const (
 
 type Err string
 
+const (
+	IDLE                = iota
+	ASSIGN_PRIMARY
+	CONFIRM_PRIMARY
+	BACKUP
+)
+
 // Put or Append
 type PutAppendArgs struct {
 	Key   string
@@ -34,3 +41,10 @@ type GetReply struct {
 
 
 // Your RPC definitions here.
+type CopyArgs struct {
+	data   map[string]string
+}
+
+type CopyReply struct {
+	Err  Err
+}
