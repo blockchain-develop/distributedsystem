@@ -37,6 +37,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 	// Your code here.
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
+	args.dump(pb.me, pb.debug)
 	v,ok := pb.data[args.Key]
 	if !ok {
 		reply.Err = ErrNoKey
@@ -45,6 +46,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		reply.Err = OK
 		reply.Value = v
 	}
+	reply.dump(pb.me, pb.debug)
 	return nil
 }
 
@@ -53,7 +55,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	// Your code here.
 	args.dump(pb.me, "", pb.debug)
 	if pb.isDuplicate(args) == true {
-		return fmt.Errorf("duplate request.")
+		return fmt.Errorf("duplicate request.")
 	}
 	for true {
 		pb.mu.Lock()
@@ -139,12 +141,21 @@ func (pb *PBServer) syncCopy(node string) *CopyReply {
 }
 
 func (pb *PBServer) acceptValue(key string, value string, op string) {
+	newValue := ""
 	if op == "Put" {
+		newValue = value
 		pb.data[key] = value
 	} else if op == "Append" {
-		v := pb.data[key]
-		v += value
-		pb.data[key] = v
+		v, ok := pb.data[key]
+		if ok {
+			newValue = v + value
+		} else {
+			newValue = value
+		}
+	}
+	pb.data[key] = newValue
+	if pb.debug == true {
+		log.Printf(" PBServer, acceptValue, %s, key: %s, value: %s", pb.me, key, newValue)
 	}
 }
 
@@ -256,12 +267,33 @@ func (args *PutAppendArgs) dump(me string, prefix string, debug bool) {
 	}
 	log.Printf(" PBServer, PutAppendArgs, %s, %s, from: %s, number: %d, key: %s, value: %s, op: %s", prefix, me, args.From, args.Number, args.Key, args.Value, args.Op)
 }
+func (reply *PutAppendReply) dump(me string, prefix string, debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" PBServer, PutAppendReply, %s, %s, result: %s", prefix, me, reply.Err)
+}
+
 
 func (args *CopyArgs) dump(me string, debug bool) {
 	if debug == false {
 		return
 	}
 	log.Printf(" PBServer, CopyArgs, Sync, %s", me)
+}
+
+func (args *GetArgs) dump(me string, debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" PBServer, GetArgs, %s", me)
+}
+
+func (reply *GetReply) dump(me string, debug bool) {
+	if debug == false {
+		return
+	}
+	log.Printf(" PBServer, GetReply, %s", me)
 }
 
 func StartServer(vshost string, me string) *PBServer {
