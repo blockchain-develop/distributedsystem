@@ -44,15 +44,15 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 	args.dump(pb.me, pb.debug)
 	if pb.view.Primary != pb.me {
 		reply.Err = ErrWrongServer
-		return fmt.Errorf("i am not primary.")
+		return nil
 	}
 	if pb.state != CONFIRM_PRIMARY {
 		reply.Err = ErrWrongServer
-		return fmt.Errorf("primary is not confirmed.")
+		return nil
 	}
 	if pb.partition == true {
 		reply.Err = ErrWrongServer
-		return fmt.Errorf("primary is partition.")
+		return nil
 	}
 	v,ok := pb.data[args.Key]
 	if !ok {
@@ -232,7 +232,6 @@ func (pb *PBServer) tick() {
 	}
 	newView, err := pb.vs.Ping(viewnum)
 	if err != nil {
-		log.Printf("ping err: %s", err.Error())
 		pb.partition = true
 		return
 	}
