@@ -20,7 +20,10 @@ package paxos
 // px.Min() int -- instances before this seq have been forgotten
 //
 
-import "net"
+import (
+	"net"
+	"time"
+)
 import "net/rpc"
 import "log"
 
@@ -38,6 +41,9 @@ import "math/rand"
 // or it was agreed but forgotten (i.e. < Min()).
 type Fate int
 
+// use for test
+var id int = 1000000
+
 const (
 	Decided   Fate = iota + 1
 	Pending        // not yet decided.
@@ -52,9 +58,27 @@ type Paxos struct {
 	rpcCount   int32 // for testing
 	peers      []string
 	me         int // index into peers[]
-
-
 	// Your data here.
+	prepareReplyChan            chan *PrepareExt
+	prepareArgsChan             chan *PrepareArgs
+	prepareReplyInterChan       chan *PrepareReply
+	acceptReplyChan             chan *AcceptExt
+	acceptArgsChan              chan *AcceptArgs
+	acceptReplyInterChan        chan *AcceptReply
+	exitChan                    chan bool
+
+	timer                       *time.Timer
+
+	id                          int
+	debug                       bool
+}
+
+func (px *Paxos) dump(prefix string, debug bool) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, %s, paxos state: \n", px.id, prefix)
+	log.Printf(dumpLog)
 }
 
 //
@@ -93,6 +117,124 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 	return false
 }
 
+type PrepareArgs struct {
+	Seq       int
+	V         interface{}
+}
+
+type PrepareReply struct {
+	Seq        int
+	Seq_a      int
+	V_a        interface{}
+}
+
+type PrepareExt struct {
+	Args      *PrepareArgs
+	Reply     *PrepareReply
+}
+
+func (args *PrepareArgs) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, PrepareArgs, Seq: %d", id, args.Seq)
+	log.Printf(dumpLog)
+}
+
+func (reply *PrepareReply) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, PrepareReply, Seq: %d", id, reply.Seq)
+	log.Printf(dumpLog)
+}
+
+func (px *Paxos) Prepare(seq int, v interface{}) {
+	for _, peer := range px.peers {
+		go func(server string) {
+			args := &PrepareArgs{
+				Seq: seq,
+				V: v,
+			}
+			var reply PrepareReply
+			call(server, "Paxos.PrepareVote", args, &reply)
+			ext := &PrepareExt{
+				Args: args,
+				Reply: &reply,
+			}
+			px.prepareReplyChan <- ext
+		}(peer)
+	}
+}
+
+func (px *Paxos) PrepareVote(args *PrepareArgs, reply *PrepareReply) {
+	px.prepareArgsChan <- args
+	replyInternal, ok := <- px.prepareReplyInterChan
+	if !ok || replyInternal == nil {
+		log.Fatal("PrepareVote fatal.")
+	} else {
+		*reply = *replyInternal
+	}
+}
+
+
+type AcceptArgs struct {
+	Seq          int
+	V            interface{}
+}
+
+type AcceptReply struct {
+	Seq          int
+}
+
+type AcceptExt struct {
+	Args      *AcceptArgs
+	Reply     *AcceptReply
+}
+
+func (args *AcceptArgs) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, AcceptArgs, Seq: %d", id, args.Seq)
+	log.Printf(dumpLog)
+}
+
+func (reply *AcceptReply) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, AcceptReply, Seq: %d", id, reply.Seq)
+	log.Printf(dumpLog)
+}
+
+func (px *Paxos) Accept(seq int, v interface{}) {
+	for _, peer := range px.peers {
+		go func(server string) {
+			args := &AcceptArgs{
+				Seq: seq,
+				V: v,
+			}
+			var reply AcceptReply
+			call(server, "Paxos.AcceptVote", args, &reply)
+			ext := &AcceptExt{
+				Args: args,
+				Reply: &reply,
+			}
+			px.acceptReplyChan <- ext
+		}(peer)
+	}
+}
+
+func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) {
+	px.acceptArgsChan <- args
+	replyInternal, ok := <- px.acceptReplyInterChan
+	if !ok || replyInternal == nil {
+		log.Fatal("AcceptVote fatal.")
+	} else {
+		*reply = *replyInternal
+	}
+}
 
 //
 // the application wants paxos to start agreement on
@@ -103,6 +245,7 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 //
 func (px *Paxos) Start(seq int, v interface{}) {
 	// Your code here.
+	px.Prepare(seq, v)
 }
 
 //
@@ -182,6 +325,7 @@ func (px *Paxos) Kill() {
 	if px.l != nil {
 		px.l.Close()
 	}
+	px.exitChan <- true
 }
 
 //
@@ -213,9 +357,18 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px := &Paxos{}
 	px.peers = peers
 	px.me = me
-
-
+	px.id = id
+	id ++
 	// Your initialization code here.
+	px.prepareReplyChan = make(chan *PrepareExt)
+	px.prepareArgsChan = make(chan *PrepareArgs)
+	px.prepareReplyInterChan = make(chan *PrepareReply)
+	px.acceptReplyChan = make(chan *AcceptExt)
+	px.acceptArgsChan = make(chan *AcceptArgs)
+	px.acceptReplyInterChan = make(chan *AcceptReply)
+	px.exitChan = make(chan bool)
+
+	go px.eventLoop()
 
 	if rpcs != nil {
 		// caller will create socket &c
@@ -268,6 +421,64 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 		}()
 	}
 
-
 	return px
+}
+
+func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
+	args.dump(px.debug, px.id)
+	px.dump("Before handlePrepareVote", px.debug)
+	return nil
+}
+
+func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
+	ext.Reply.dump(px.debug, px.id)
+	px.dump("Before handlePrepareReply", px.debug)
+}
+
+func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
+	args.dump(px.debug, px.id)
+	px.dump("Before handleAcceptVote", px.debug)
+	return nil
+}
+
+func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
+	ext.Reply.dump(px.debug, px.id)
+	px.dump("Before handleAcceptReply", px.debug)
+}
+
+func (px *Paxos) eventLoop() {
+	for {
+		select {
+		case <- px.timer.C:
+
+		case prepareArgs, ok :=  <- px.prepareArgsChan:
+			if !ok || prepareArgs == nil {
+				break
+			}
+			reply := px.handlePrepareVote(prepareArgs)
+			px.prepareReplyInterChan <- reply
+		case prepareReply, ok := <- px.prepareReplyChan:
+			if !ok || prepareReply == nil {
+				break
+			}
+			px.handlePrepareReply(prepareReply)
+		case acceptArgs, ok := <- px.acceptArgsChan:
+			if !ok || acceptArgs == nil {
+				break
+			}
+			reply := px.handleAcceptVote(acceptArgs)
+			px.acceptReplyInterChan <- reply
+		case acceptReply, ok := <- px.acceptReplyChan:
+			if !ok || acceptReply == nil {
+				break
+			}
+			px.handleAcceptReply(acceptReply)
+		case exit, ok := <- px.exitChan:
+			if !ok || exit != true {
+				break
+			}
+			px.timer.Stop()
+			return
+		}
+	}
 }

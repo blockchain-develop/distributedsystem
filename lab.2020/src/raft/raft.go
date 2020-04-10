@@ -811,14 +811,14 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.id = id
 	id ++
 
-	rf.requestVoteArgsChan = make(chan *RequestVoteArgs, 1)
-	rf.requestVoteReplyChan = make(chan *RequestVoteReplyExt)
-	rf.requestVoteReplyInternalChan = make(chan *RequestVoteReply)
-	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs, 1)
-	rf.appendEntriesReplyChan = make(chan *AppendEntriesReplyExt)
-	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply)
-	rf.commandChan = make(chan *interface{}, 1)
-	rf.commandReplyChan = make(chan *CommandReply)
+	rf.requestVoteArgsChan = make(chan *RequestVoteArgs)
+	rf.requestVoteReplyChan = make(chan *RequestVoteReplyExt, 128)
+	rf.requestVoteReplyInternalChan = make(chan *RequestVoteReply, 128)
+	rf.appendEntriesArgsChan = make(chan *AppendEntriesArgs)
+	rf.appendEntriesReplyChan = make(chan *AppendEntriesReplyExt, 128)
+	rf.appendEntriesReplyInternalChan = make(chan *AppendEntriesReply, 128)
+	rf.commandChan = make(chan *interface{})
+	rf.commandReplyChan = make(chan *CommandReply, 128)
 	rf.exitChan = make(chan bool)
 	rf.timer = time.NewTimer(time.Millisecond * (time.Duration(ELECTION_TIME + rand.Int()%ELECTION_TIME)))
 
