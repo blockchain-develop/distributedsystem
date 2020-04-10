@@ -31,6 +31,7 @@ type PBServer struct {
 	data       map[string]string
 	state      int
 	synced     bool
+	partition  bool
 	requests   map[string]*RequestState
 	debug      bool
 }
@@ -48,6 +49,10 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 	if pb.state != CONFIRM_PRIMARY {
 		reply.Err = ErrWrongServer
 		return fmt.Errorf("primary is not confirmed.")
+	}
+	if pb.partition == true {
+		reply.Err = ErrWrongServer
+		return fmt.Errorf("primary is partition.")
 	}
 	v,ok := pb.data[args.Key]
 	if !ok {
@@ -83,6 +88,11 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 			return nil
 		}
 		if pb.state != CONFIRM_PRIMARY {
+			reply.Err = ErrWrongServer
+			pb.mu.Unlock()
+			return nil
+		}
+		if pb.partition == true {
 			reply.Err = ErrWrongServer
 			pb.mu.Unlock()
 			return nil
@@ -223,8 +233,10 @@ func (pb *PBServer) tick() {
 	newView, err := pb.vs.Ping(viewnum)
 	if err != nil {
 		log.Printf("ping err: %s", err.Error())
+		pb.partition = true
 		return
 	}
+	pb.partition = false
 	if newView.Primary == pb.me {
 		if pb.view == nil || pb.view.Primary != pb.me {
 			pb.state = ASSIGN_PRIMARY
@@ -346,6 +358,7 @@ func StartServer(vshost string, me string) *PBServer {
 	pb.synced = false
 	pb.debug = true
 	pb.requests = make(map[string]*RequestState)
+	pb.partition = false
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(pb)

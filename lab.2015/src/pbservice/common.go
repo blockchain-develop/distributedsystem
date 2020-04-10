@@ -30,7 +30,6 @@ type PutAppendArgs struct {
 	From  string
 	Number int
 	Op    string
-
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
 }
