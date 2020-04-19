@@ -666,9 +666,6 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	if reply.N_a == -2 {
 		return
 	}
-	if reply.N != px.n_p {
-		return
-	}
 	if px.prepared == true {
 		return
 	}
@@ -708,9 +705,6 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	px.dump("Before handleAcceptReply", px.debug)
 	reply := ext.Reply
 	if reply.N == -2 {
-		return
-	}
-	if reply.N != px.n_a {
 		return
 	}
 	if px.accepted == true {
