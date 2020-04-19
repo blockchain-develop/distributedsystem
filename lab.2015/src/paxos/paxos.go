@@ -2,6 +2,7 @@ package paxos
 
 import (
 	"fmt"
+	"github.com/walletsvr/tron/api"
 	"log"
 	"math"
 	"math/rand"
@@ -120,6 +121,8 @@ type Paxos struct {
 	decidedReplyChan            chan *DecidedExt
 	decidedArgsChan             chan *DecidedArgs
 	decidedReplyInterChan       chan *DecidedReply
+	commandReplyChan            chan *CommandReply
+	commandArgsChan             chan *CommandArgs
 	exitChan                    chan bool
 
 	timer                       *time.Timer
@@ -173,6 +176,43 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 	fmt.Println(err)
 	return false
 }
+
+const (
+	START   = iota
+	DONE
+	MAX
+	MIN
+	STATUS
+)
+
+type CommandArgs struct {
+	Name    int
+	Seq     int
+	V       interface{}
+}
+
+type CommandReply struct {
+	Seq      int
+	State    Fate
+	V        interface{}
+}
+
+func (args *CommandArgs) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandArgs, Seq: %d", id, args.Seq)
+	log.Printf(dumpLog)
+}
+
+func (reply *CommandReply) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandReply, Seq: %d, State: %d", id, reply.Seq, reply.State)
+	log.Printf(dumpLog)
+}
+
 
 type PrepareArgs struct {
 	N       int
@@ -267,6 +307,8 @@ func (reply *AcceptReply) dump(debug bool, id int) {
 }
 
 func (px *Paxos) Accept(n int, v interface{}) {
+	px.acceptVoteCounter = 0
+	px.accepted = false
 	args := &AcceptArgs{
 		N: n,
 		V: v,
@@ -362,7 +404,16 @@ func (px *Paxos) DecidedReceive(args *DecidedArgs, reply *DecidedReply) error {
 //
 func (px *Paxos) Start(seq int, v interface{}) {
 	// Your code here.
-	px.Prepare(seq, v)
+	px.commandArgsChan <- &CommandArgs{
+		Seq: seq,
+		V: v,
+		Name: START,
+	}
+	reply, ok := <- px.commandReplyChan
+	if !ok || reply == nil {
+		log.Fatal("Start fatal.")
+	}
+	return
 }
 
 //
@@ -373,11 +424,15 @@ func (px *Paxos) Start(seq int, v interface{}) {
 //
 func (px *Paxos) Done(seq int) {
 	// Your code here.
-	for k, v := range px.instanceState {
-		if k <= seq {
-			v.state = Forgotten
-		}
+	px.commandArgsChan <- &CommandArgs{
+		Seq: seq,
+		Name: DONE,
 	}
+	reply, ok := <- px.commandReplyChan
+	if !ok || reply == nil {
+		log.Fatal("Start fatal.")
+	}
+	return
 }
 
 //
@@ -387,13 +442,14 @@ func (px *Paxos) Done(seq int) {
 //
 func (px *Paxos) Max() int {
 	// Your code here.
-	max := 0
-	for k, v := range px.instanceState {
-		if v.state == Decided && k > max {
-			max = k
-		}
+	px.commandArgsChan <- &CommandArgs{
+		Name: MAX,
 	}
-	return max
+	reply, ok := <- px.commandReplyChan
+	if !ok || reply == nil {
+		log.Fatal("Start fatal.")
+	}
+	return reply.Seq
 }
 
 //
@@ -426,13 +482,14 @@ func (px *Paxos) Max() int {
 //
 func (px *Paxos) Min() int {
 	// You code here.
-	min := math.MaxInt32
-	for k, v := range px.instanceState {
-		if v.state == Decided && k < min {
-			min = k
-		}
+	px.commandArgsChan <- &CommandArgs{
+		Name: MIN,
 	}
-	return min
+	reply, ok := <- px.commandReplyChan
+	if !ok || reply == nil {
+		log.Fatal("Start fatal.")
+	}
+	return reply.Seq
 }
 
 //
@@ -444,11 +501,15 @@ func (px *Paxos) Min() int {
 //
 func (px *Paxos) Status(seq int) (Fate, interface{}) {
 	// Your code here.
-	state, ok := px.instanceState[seq]
-	if !ok {
-		return Forgotten, nil
+	px.commandArgsChan <- &CommandArgs{
+		Seq: seq,
+		Name: STATUS,
 	}
-	return state.state, nil
+	reply, ok := <- px.commandReplyChan
+	if !ok || reply == nil {
+		log.Fatal("Start fatal.")
+	}
+	return reply.State, reply.V
 }
 
 
@@ -513,6 +574,8 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.decidedReplyChan = make(chan *DecidedExt)
 	px.decidedArgsChan = make(chan *DecidedArgs)
 	px.decidedReplyInterChan = make(chan *DecidedReply)
+	px.commandReplyChan = make(chan *CommandReply)
+	px.commandArgsChan = make(chan *CommandArgs)
 	px.exitChan = make(chan bool)
 	px.timer = time.NewTimer(time.Millisecond * 5)
 
@@ -584,9 +647,6 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	px.instanceState[args.N] = state
 	if args.N > px.n_p {
 		px.n_p = args.N
-		px.prepareVoteCounter = 0
-		px.prepared = false
-		px.prepareVote = nil
 		reply.N = args.N
 		reply.N_a = px.n_a
 		reply.V_a = px.v_a
@@ -634,8 +694,6 @@ func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 		px.n_p = args.N
 		px.n_a = args.N
 		px.v_a = args.V
-		px.acceptVoteCounter = 0
-		px.accepted = false
 		reply.N = args.N
 	} else {
 		reply.N = -2
@@ -658,6 +716,7 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	}
 	px.acceptVoteCounter ++
 	if px.acceptVoteCounter > len(px.peers)/2 {
+		px.accepted = true
 		px.Decided(px.n_a, px.v_a)
 	}
 }
@@ -673,6 +732,58 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	ext.Reply.dump(px.debug, px.id)
 	px.dump("Before handleDecidedReply", px.debug)
+}
+
+func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
+	args.dump(px.debug, px.id)
+	px.dump("Before handleCommand", px.debug)
+	var reply CommandReply
+	switch args.Name {
+	case START:
+		px.Prepare(args.Seq, args.V)
+		px.prepareVoteCounter = 0
+		px.prepared = false
+		px.prepareVote = nil
+		return &reply
+	case DONE:
+		seq := args.Seq
+		for k, v := range px.instanceState {
+			if k <= seq {
+				v.state = Forgotten
+			}
+		}
+		return &reply
+	case MAX:
+		max := 0
+		for k, v := range px.instanceState {
+			if v.state == Decided && k > max {
+				max = k
+			}
+		}
+		reply.Seq = max
+		return &reply
+	case MIN:
+		min := math.MaxInt32
+		for k, v := range px.instanceState {
+			if v.state == Decided && k < min {
+				min = k
+			}
+		}
+		reply.Seq = min
+		return &reply
+	case STATUS:
+		seq := args.Seq
+		state, ok := px.instanceState[seq]
+		if !ok {
+			reply.State = Forgotten
+			reply.V = nil
+		} else {
+			reply.State = state.state
+			reply.V = state.instance
+		}
+		return &reply
+	}
+	return &reply
 }
 
 func (px *Paxos) eventLoop() {
@@ -713,6 +824,12 @@ func (px *Paxos) eventLoop() {
 				break
 			}
 			px.handleDecidedReply(decidedReply)
+		case commandArgs, ok := <- px.commandArgsChan:
+			if !ok || commandArgs == nil {
+				break
+			}
+			reply := px.handleCommand(commandArgs)
+			px.commandReplyChan <- reply
 		case exit, ok := <- px.exitChan:
 			if !ok || exit != true {
 				break
