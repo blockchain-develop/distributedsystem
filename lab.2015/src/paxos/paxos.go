@@ -649,6 +649,7 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 		}
 		px.instanceState[args.N] = state
 		px.n_p = args.N
+		px.v_p = args.V
 		reply.N = args.N
 		reply.N_a = px.n_a
 		reply.V_a = px.v_a
