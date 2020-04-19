@@ -516,8 +516,6 @@ func (px *Paxos) Status(seq int) (Fate, interface{}) {
 	return reply.State, reply.V
 }
 
-
-
 //
 // tell the peer to shut itself down.
 // for testing.
@@ -643,13 +641,13 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	args.dump(px.debug, px.id)
 	px.dump("Before handlePrepareVote", px.debug)
 	var reply PrepareReply
-	state := &InstanceState{
-		instance: &args.V,
-		seq: args.N,
-		state: Pending,
-	}
-	px.instanceState[args.N] = state
 	if args.N > px.n_p {
+		state := &InstanceState{
+			instance: &args.V,
+			seq: args.N,
+			state: Pending,
+		}
+		px.instanceState[args.N] = state
 		px.n_p = args.N
 		reply.N = args.N
 		reply.N_a = px.n_a
