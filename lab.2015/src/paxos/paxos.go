@@ -133,6 +133,8 @@ func (px *Paxos) dump(prefix string, debug bool) {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, %s, paxos state: \n", px.id, prefix)
+	dumpLog += fmt.Sprintf("    n_p: %d, n_a: %d, prepare vote counter: %d, accept vote counter: %d, prepared: %v, accepted: %v\n",
+		px.n_p, px.n_a, px.prepareVoteCounter, px.acceptVoteCounter, px.prepared, px.accepted)
 	log.Printf(dumpLog)
 }
 
@@ -192,7 +194,7 @@ func (args *PrepareArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, PrepareArgs, Seq: %d", id, args.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, Seq: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -200,7 +202,7 @@ func (reply *PrepareReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, PrepareReply, Seq: %d", id, reply.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, Seq: %d", id, reply.N)
 	log.Printf(dumpLog)
 }
 
@@ -256,7 +258,7 @@ func (args *AcceptArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, AcceptArgs, Seq: %d", id, args.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, Seq: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -264,7 +266,7 @@ func (reply *AcceptReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, AcceptReply, Seq: %d", id, reply.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptReply, Seq: %d", id, reply.N)
 	log.Printf(dumpLog)
 }
 
@@ -314,7 +316,7 @@ func (args *DecidedArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, DecidedArgs, ", id)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, ", id)
 	log.Printf(dumpLog)
 }
 
@@ -322,7 +324,7 @@ func (reply *DecidedReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, DecidedReply, ", id)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedReply, ", id)
 	log.Printf(dumpLog)
 }
 
