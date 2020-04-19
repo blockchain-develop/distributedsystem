@@ -499,6 +499,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.me = me
 	px.id = id
 	id ++
+	px.debug = true
 
 	// Your initialization code here.
 	px.instanceState = make(map[int]*InstanceState, 0)
