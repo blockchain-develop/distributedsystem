@@ -207,14 +207,10 @@ func (reply *PrepareReply) dump(debug bool, id int) {
 }
 
 func (px *Paxos) Prepare(n int, v interface{}) {
-	px.mu.Lock()
-	px.n_p = n
-	px.v_p = v
 	args := &PrepareArgs{
 		N: n,
 		V: v,
 	}
-	px.mu.Unlock()
 	for _, peer := range px.peers {
 		go func(server string) {
 			var reply PrepareReply
