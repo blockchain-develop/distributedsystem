@@ -721,7 +721,17 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	args.dump(px.debug, px.id)
 	px.dump("Before handleDecided", px.debug)
 	var reply DecidedReply
-	px.instanceState[args.N].state = Decided
+	state, ok := px.instanceState[args.N]
+	if !ok {
+		state := &InstanceState{
+			instance: &args.V,
+			seq: args.N,
+			state: Decided,
+		}
+		px.instanceState[args.N] = state
+	} else {
+		state.state = Decided
+	}
 	return &reply
 }
 
