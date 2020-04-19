@@ -226,7 +226,7 @@ func (px *Paxos) Prepare(n int, v interface{}) {
 	}
 }
 
-func (px *Paxos) PrepareVote(args *PrepareArgs, reply *PrepareReply) {
+func (px *Paxos) PrepareVote(args *PrepareArgs, reply *PrepareReply) error {
 	px.prepareArgsChan <- args
 	replyInternal, ok := <- px.prepareReplyInterChan
 	if !ok || replyInternal == nil {
@@ -234,6 +234,7 @@ func (px *Paxos) PrepareVote(args *PrepareArgs, reply *PrepareReply) {
 	} else {
 		*reply = *replyInternal
 	}
+	return nil
 }
 
 
@@ -285,7 +286,7 @@ func (px *Paxos) Accept(n int, v interface{}) {
 	}
 }
 
-func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) {
+func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) error {
 	px.acceptArgsChan <- args
 	replyInternal, ok := <- px.acceptReplyInterChan
 	if !ok || replyInternal == nil {
@@ -293,6 +294,7 @@ func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) {
 	} else {
 		*reply = *replyInternal
 	}
+	return nil
 }
 
 type DecidedArgs struct {
@@ -342,7 +344,7 @@ func (px *Paxos) Decided(n int, v interface{}) {
 	}
 }
 
-func (px *Paxos) DecidedReceive(args *DecidedArgs, reply *DecidedReply) {
+func (px *Paxos) DecidedReceive(args *DecidedArgs, reply *DecidedReply) error {
 	px.decidedArgsChan <- args
 	replyInternal, ok := <- px.decidedReplyInterChan
 	if !ok || replyInternal == nil {
@@ -350,6 +352,7 @@ func (px *Paxos) DecidedReceive(args *DecidedArgs, reply *DecidedReply) {
 	} else {
 		*reply = *replyInternal
 	}
+	return nil
 }
 
 //
