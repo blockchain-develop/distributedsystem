@@ -1,5 +1,18 @@
 package paxos
 
+import (
+	"fmt"
+	"log"
+	"math/rand"
+	"net"
+	"net/rpc"
+	"os"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
+)
+
 //
 // Paxos library, to be included in an application.
 // Multiple applications will run, each including
@@ -20,20 +33,6 @@ package paxos
 // px.Min() int -- instances before this seq have been forgotten
 //
 
-import (
-	"net"
-	"time"
-)
-import "net/rpc"
-import "log"
-
-import "os"
-import "syscall"
-import "sync"
-import "sync/atomic"
-import "fmt"
-import "math/rand"
-
 
 // px.Status() return values, indicating
 // whether an agreement has been decided,
@@ -50,6 +49,40 @@ const (
 	Forgotten      // decided but forgotten.
 )
 
+/*
+the Paxos pseudo-code (for a single instance) from the lecture:
+
+proposer(v):
+	while not decided:
+	choose n, unique and higher than any n seen so far
+	send prepare(n) to all servers including self
+	if prepare_ok(n, n_a, v_a) from majority:
+		v' = v_a with highest n_a; choose own v otherwise
+		send accept(n, v') to all
+		if accept_ok(n) from majority:
+			send decided(v') to all
+
+acceptor's state:
+	n_p (highest prepare seen)
+	n_a, v_a (highest accept seen)
+
+acceptor's prepare(n) handler:
+	if n > n_p
+		n_p = n
+		reply prepare_ok(n, n_a, v_a)
+	else
+		reply prepare_reject
+
+acceptor's accept(n, v) handler:
+	if n >= n_p
+		n_p = n
+		n_a = n
+		v_a = v
+		reply accept_ok(n)
+	else
+		reply accept_reject
+*/
+
 type Paxos struct {
 	mu         sync.Mutex
 	l          net.Listener
@@ -59,12 +92,25 @@ type Paxos struct {
 	peers      []string
 	me         int // index into peers[]
 	// Your data here.
+	n_p                         int
+	v_p                         interface{}
+	n_a                         int
+	v_a                         interface{}
+	prepareVote                 *PrepareReply
+	prepareVoteCounter          int
+	prepared                    bool
+	accepted                    bool
+	acceptVoteCounter           int
+
 	prepareReplyChan            chan *PrepareExt
 	prepareArgsChan             chan *PrepareArgs
 	prepareReplyInterChan       chan *PrepareReply
 	acceptReplyChan             chan *AcceptExt
 	acceptArgsChan              chan *AcceptArgs
 	acceptReplyInterChan        chan *AcceptReply
+	decidedReplyChan            chan *DecidedExt
+	decidedArgsChan             chan *DecidedArgs
+	decidedReplyInterChan       chan *DecidedReply
 	exitChan                    chan bool
 
 	timer                       *time.Timer
@@ -118,14 +164,14 @@ func call(srv string, name string, args interface{}, reply interface{}) bool {
 }
 
 type PrepareArgs struct {
-	Seq       int
-	V         interface{}
+	N       int
+	V       interface{}
 }
 
 type PrepareReply struct {
-	Seq        int
-	Seq_a      int
-	V_a        interface{}
+	N        int
+	N_a      int
+	V_a      interface{}
 }
 
 type PrepareExt struct {
@@ -137,7 +183,7 @@ func (args *PrepareArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, PrepareArgs, Seq: %d", id, args.Seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, PrepareArgs, Seq: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -145,17 +191,21 @@ func (reply *PrepareReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, PrepareReply, Seq: %d", id, reply.Seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, PrepareReply, Seq: %d", id, reply.N)
 	log.Printf(dumpLog)
 }
 
-func (px *Paxos) Prepare(seq int, v interface{}) {
+func (px *Paxos) Prepare(n int, v interface{}) {
+	px.mu.Lock()
+	px.n_p = n
+	px.v_p = v
+	args := &PrepareArgs{
+		N: n,
+		V: v,
+	}
+	px.mu.Unlock()
 	for _, peer := range px.peers {
 		go func(server string) {
-			args := &PrepareArgs{
-				Seq: seq,
-				V: v,
-			}
 			var reply PrepareReply
 			call(server, "Paxos.PrepareVote", args, &reply)
 			ext := &PrepareExt{
@@ -179,12 +229,12 @@ func (px *Paxos) PrepareVote(args *PrepareArgs, reply *PrepareReply) {
 
 
 type AcceptArgs struct {
-	Seq          int
-	V            interface{}
+	N          int
+	V          interface{}
 }
 
 type AcceptReply struct {
-	Seq          int
+	N          int
 }
 
 type AcceptExt struct {
@@ -196,7 +246,7 @@ func (args *AcceptArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, AcceptArgs, Seq: %d", id, args.Seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, AcceptArgs, Seq: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -204,17 +254,17 @@ func (reply *AcceptReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, AcceptReply, Seq: %d", id, reply.Seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, AcceptReply, Seq: %d", id, reply.N)
 	log.Printf(dumpLog)
 }
 
-func (px *Paxos) Accept(seq int, v interface{}) {
+func (px *Paxos) Accept(n int, v interface{}) {
+	args := &AcceptArgs{
+		N: n,
+		V: v,
+	}
 	for _, peer := range px.peers {
 		go func(server string) {
-			args := &AcceptArgs{
-				Seq: seq,
-				V: v,
-			}
 			var reply AcceptReply
 			call(server, "Paxos.AcceptVote", args, &reply)
 			ext := &AcceptExt{
@@ -231,6 +281,61 @@ func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) {
 	replyInternal, ok := <- px.acceptReplyInterChan
 	if !ok || replyInternal == nil {
 		log.Fatal("AcceptVote fatal.")
+	} else {
+		*reply = *replyInternal
+	}
+}
+
+type DecidedArgs struct {
+	V          interface{}
+}
+
+type DecidedReply struct {
+}
+
+type DecidedExt struct {
+	Args      *DecidedArgs
+	Reply     *DecidedReply
+}
+
+func (args *DecidedArgs) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, DecidedArgs, ", id)
+	log.Printf(dumpLog)
+}
+
+func (reply *DecidedReply) dump(debug bool, id int) {
+	if debug == false {
+		return
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, DecidedReply, ", id)
+	log.Printf(dumpLog)
+}
+
+func (px *Paxos) Decided(v interface{}) {
+	args := &DecidedArgs{
+		V: v,
+	}
+	for _, peer := range px.peers {
+		go func(server string) {
+			var reply DecidedReply
+			call(server, "Paxos.DecidedReceive", args, &reply)
+			ext := &DecidedExt{
+				Args: args,
+				Reply: &reply,
+			}
+			px.decidedReplyChan <- ext
+		}(peer)
+	}
+}
+
+func (px *Paxos) DecidedReceive(args *DecidedArgs, reply *DecidedReply) {
+	px.decidedArgsChan <- args
+	replyInternal, ok := <- px.decidedReplyInterChan
+	if !ok || replyInternal == nil {
+		log.Fatal("DecidedReceive fatal.")
 	} else {
 		*reply = *replyInternal
 	}
@@ -366,6 +471,9 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.acceptReplyChan = make(chan *AcceptExt)
 	px.acceptArgsChan = make(chan *AcceptArgs)
 	px.acceptReplyInterChan = make(chan *AcceptReply)
+	px.decidedReplyChan = make(chan *DecidedExt)
+	px.decidedArgsChan = make(chan *DecidedArgs)
+	px.decidedReplyInterChan = make(chan *DecidedReply)
 	px.exitChan = make(chan bool)
 
 	go px.eventLoop()
@@ -427,23 +535,96 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	args.dump(px.debug, px.id)
 	px.dump("Before handlePrepareVote", px.debug)
-	return nil
+	var reply PrepareReply
+	if args.N > px.n_p {
+		px.n_p = args.N
+		px.prepareVoteCounter = 0
+		px.prepared = false
+		px.prepareVote = nil
+		reply.N = args.N
+		reply.N_a = px.n_a
+		reply.V_a = px.v_a
+	} else {
+		reply.N = args.N
+		reply.N_a = -1
+	}
+	return &reply
 }
 
 func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	ext.Reply.dump(px.debug, px.id)
 	px.dump("Before handlePrepareReply", px.debug)
+	reply := ext.Reply
+	if reply.N_a == -1 {
+		return
+	}
+	if reply.N != px.n_p {
+		return
+	}
+	if px.prepared == true {
+		return
+	}
+	if px.prepareVote == nil {
+		px.prepareVote = reply
+	} else if reply.N_a > px.prepareVote.N_a {
+		px.prepareVote = reply
+	}
+	px.prepareVoteCounter ++
+	if px.prepareVoteCounter > len(px.peers) / 2 {
+		px.prepared = true
+		if px.prepareVote.N_a > px.n_a {
+			px.v_p = px.prepareVote.V_a
+		}
+		px.Accept(px.n_p, px.v_p)
+	}
 }
 
 func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 	args.dump(px.debug, px.id)
 	px.dump("Before handleAcceptVote", px.debug)
-	return nil
+	var reply AcceptReply
+	if args.N >= px.n_p {
+		px.n_p = args.N
+		px.n_a = args.N
+		px.v_a = args.V
+		px.acceptVoteCounter = 0
+		px.accepted = false
+		reply.N = args.N
+	} else {
+		reply.N = -1
+	}
+	return &reply
 }
 
 func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	ext.Reply.dump(px.debug, px.id)
 	px.dump("Before handleAcceptReply", px.debug)
+	reply := ext.Reply
+	if reply.N == -1 {
+		return
+	}
+	if reply.N != px.n_a {
+		return
+	}
+	if px.accepted == true {
+		return
+	}
+	px.acceptVoteCounter ++
+	if px.acceptVoteCounter > len(px.peers)/2 {
+		px.Decided(px.v_a)
+	}
+}
+
+func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
+	args.dump(px.debug, px.id)
+	px.dump("Before handleDecided", px.debug)
+	var reply DecidedReply
+	return &reply
+}
+
+func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
+	ext.Reply.dump(px.debug, px.id)
+	px.dump("Before handleDecidedReply", px.debug)
 }
 
 func (px *Paxos) eventLoop() {
@@ -473,6 +654,17 @@ func (px *Paxos) eventLoop() {
 				break
 			}
 			px.handleAcceptReply(acceptReply)
+		case decidedArgs, ok := <- px.decidedArgsChan:
+			if !ok || decidedArgs == nil {
+				break
+			}
+			reply := px.handleDecided(decidedArgs)
+			px.decidedReplyInterChan <- reply
+		case decidedReply, ok := <- px.decidedReplyChan:
+			if !ok || decidedReply == nil {
+				break
+			}
+			px.handleDecidedReply(decidedReply)
 		case exit, ok := <- px.exitChan:
 			if !ok || exit != true {
 				break
