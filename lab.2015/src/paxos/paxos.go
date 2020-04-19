@@ -596,7 +596,7 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 		reply.V_a = px.v_a
 	} else {
 		reply.N = args.N
-		reply.N_a = -1
+		reply.N_a = -2
 	}
 	return &reply
 }
@@ -605,7 +605,7 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	ext.Reply.dump(px.debug, px.id)
 	px.dump("Before handlePrepareReply", px.debug)
 	reply := ext.Reply
-	if reply.N_a == -1 {
+	if reply.N_a == -2 {
 		return
 	}
 	if reply.N != px.n_p {
@@ -642,7 +642,7 @@ func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 		px.accepted = false
 		reply.N = args.N
 	} else {
-		reply.N = -1
+		reply.N = -2
 	}
 	return &reply
 }
@@ -651,7 +651,7 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	ext.Reply.dump(px.debug, px.id)
 	px.dump("Before handleAcceptReply", px.debug)
 	reply := ext.Reply
-	if reply.N == -1 {
+	if reply.N == -2 {
 		return
 	}
 	if reply.N != px.n_a {
