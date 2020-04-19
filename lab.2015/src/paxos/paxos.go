@@ -3,6 +3,7 @@ package paxos
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -83,6 +84,12 @@ acceptor's accept(n, v) handler:
 		reply accept_reject
 */
 
+type InstanceState struct {
+	instance                 *interface{}
+	state                    Fate
+	seq                      int
+}
+
 type Paxos struct {
 	mu         sync.Mutex
 	l          net.Listener
@@ -91,6 +98,7 @@ type Paxos struct {
 	rpcCount   int32 // for testing
 	peers      []string
 	me         int // index into peers[]
+
 	// Your data here.
 	n_p                         int
 	v_p                         interface{}
@@ -101,6 +109,7 @@ type Paxos struct {
 	prepared                    bool
 	accepted                    bool
 	acceptVoteCounter           int
+	instanceState               map[int]*InstanceState
 
 	prepareReplyChan            chan *PrepareExt
 	prepareArgsChan             chan *PrepareArgs
@@ -287,6 +296,7 @@ func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) {
 }
 
 type DecidedArgs struct {
+	N          int
 	V          interface{}
 }
 
@@ -314,8 +324,9 @@ func (reply *DecidedReply) dump(debug bool, id int) {
 	log.Printf(dumpLog)
 }
 
-func (px *Paxos) Decided(v interface{}) {
+func (px *Paxos) Decided(n int, v interface{}) {
 	args := &DecidedArgs{
+		N: n,
 		V: v,
 	}
 	for _, peer := range px.peers {
@@ -361,6 +372,11 @@ func (px *Paxos) Start(seq int, v interface{}) {
 //
 func (px *Paxos) Done(seq int) {
 	// Your code here.
+	for k, v := range px.instanceState {
+		if k <= seq {
+			v.state = Forgotten
+		}
+	}
 }
 
 //
@@ -370,7 +386,13 @@ func (px *Paxos) Done(seq int) {
 //
 func (px *Paxos) Max() int {
 	// Your code here.
-	return 0
+	max := 0
+	for k, v := range px.instanceState {
+		if v.state == Decided && k > max {
+			max = k
+		}
+	}
+	return max
 }
 
 //
@@ -403,7 +425,13 @@ func (px *Paxos) Max() int {
 //
 func (px *Paxos) Min() int {
 	// You code here.
-	return 0
+	min := math.MaxInt32
+	for k, v := range px.instanceState {
+		if v.state == Decided && k < min {
+			min = k
+		}
+	}
+	return min
 }
 
 //
@@ -415,7 +443,11 @@ func (px *Paxos) Min() int {
 //
 func (px *Paxos) Status(seq int) (Fate, interface{}) {
 	// Your code here.
-	return Pending, nil
+	state, ok := px.instanceState[seq]
+	if !ok {
+		return Forgotten, nil
+	}
+	return state.state, nil
 }
 
 
@@ -536,6 +568,12 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	args.dump(px.debug, px.id)
 	px.dump("Before handlePrepareVote", px.debug)
 	var reply PrepareReply
+	state := &InstanceState{
+		instance: &args.V,
+		seq: args.N,
+		state: Pending,
+	}
+	px.instanceState[args.N] = state
 	if args.N > px.n_p {
 		px.n_p = args.N
 		px.prepareVoteCounter = 0
@@ -573,6 +611,7 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	if px.prepareVoteCounter > len(px.peers) / 2 {
 		px.prepared = true
 		if px.prepareVote.N_a > px.n_a {
+			px.n_p = px.prepareVote.N_a
 			px.v_p = px.prepareVote.V_a
 		}
 		px.Accept(px.n_p, px.v_p)
@@ -611,7 +650,7 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	}
 	px.acceptVoteCounter ++
 	if px.acceptVoteCounter > len(px.peers)/2 {
-		px.Decided(px.v_a)
+		px.Decided(px.n_a, px.v_a)
 	}
 }
 
@@ -619,6 +658,7 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	args.dump(px.debug, px.id)
 	px.dump("Before handleDecided", px.debug)
 	var reply DecidedReply
+	px.instanceState[args.N].state = Decided
 	return &reply
 }
 
