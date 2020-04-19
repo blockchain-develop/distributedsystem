@@ -496,7 +496,9 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.me = me
 	px.id = id
 	id ++
+
 	// Your initialization code here.
+	px.instanceState = make(map[int]*InstanceState, 0)
 	px.prepareReplyChan = make(chan *PrepareExt)
 	px.prepareArgsChan = make(chan *PrepareArgs)
 	px.prepareReplyInterChan = make(chan *PrepareReply)
@@ -507,6 +509,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.decidedArgsChan = make(chan *DecidedArgs)
 	px.decidedReplyInterChan = make(chan *DecidedReply)
 	px.exitChan = make(chan bool)
+	px.timer = time.NewTimer(time.Millisecond * 5)
 
 	go px.eventLoop()
 
