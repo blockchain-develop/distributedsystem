@@ -2,7 +2,6 @@ package paxos
 
 import (
 	"fmt"
-	"github.com/walletsvr/tron/api"
 	"log"
 	"math"
 	"math/rand"
@@ -138,6 +137,11 @@ func (px *Paxos) dump(prefix string, debug bool) {
 	dumpLog := fmt.Sprintf(" paxos: %d, %s, paxos state: \n", px.id, prefix)
 	dumpLog += fmt.Sprintf("    n_p: %d, n_a: %d, prepare vote counter: %d, accept vote counter: %d, prepared: %v, accepted: %v\n",
 		px.n_p, px.n_a, px.prepareVoteCounter, px.acceptVoteCounter, px.prepared, px.accepted)
+	dumpLog += "    state:"
+	for k, v := range px.instanceState {
+		dumpLog += fmt.Sprintf(" [%d,%d] ", k, v.state)
+	}
+	dumpLog += "\n"
 	log.Printf(dumpLog)
 }
 
@@ -201,7 +205,7 @@ func (args *CommandArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandArgs, Seq: %d", id, args.Seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandArgs, Name: %d, Seq: %d", id, args.Name, args.Seq)
 	log.Printf(dumpLog)
 }
 
@@ -354,7 +358,7 @@ func (args *DecidedArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, ", id)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -779,7 +783,7 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 			reply.V = nil
 		} else {
 			reply.State = state.state
-			reply.V = state.instance
+			reply.V = *state.instance
 		}
 		return &reply
 	}
