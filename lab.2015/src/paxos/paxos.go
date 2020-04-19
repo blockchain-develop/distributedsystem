@@ -194,7 +194,7 @@ func (args *PrepareArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, Seq: %d", id, args.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -202,7 +202,7 @@ func (reply *PrepareReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, Seq: %d", id, reply.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d", id, reply.N, reply.N_a)
 	log.Printf(dumpLog)
 }
 
@@ -258,7 +258,7 @@ func (args *AcceptArgs) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, Seq: %d", id, args.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
@@ -266,7 +266,7 @@ func (reply *AcceptReply) dump(debug bool, id int) {
 	if debug == false {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptReply, Seq: %d", id, reply.N)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptReply, N: %d", id, reply.N)
 	log.Printf(dumpLog)
 }
 
@@ -504,6 +504,9 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.debug = true
 
 	// Your initialization code here.
+	px.n_p = -1
+	px.n_a = -1
+
 	px.instanceState = make(map[int]*InstanceState, 0)
 	px.prepareReplyChan = make(chan *PrepareExt)
 	px.prepareArgsChan = make(chan *PrepareArgs)
