@@ -208,16 +208,31 @@ type CommandReply struct {
 	V        interface{}
 }
 
+func CommandName(name int) string {
+	switch name {
+	case START:
+		return "start"
+	case DONE:
+		return "done"
+	case MAX:
+		return "max"
+	case MIN:
+		return "min"
+	case STATUS:
+		return "status"
+	}
+}
+
 func (args *CommandArgs) dump(logLevel int, id int) {
-	if logLevel < DEBUG {
+	if logLevel < INFO {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandArgs, Name: %d, Seq: %d", id, args.Name, args.Seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandArgs, Name: %s, Seq: %d", id, CommandName(args.Name), args.Seq)
 	log.Printf(dumpLog)
 }
 
 func (reply *CommandReply) dump(logLevel int, id int) {
-	if logLevel < DEBUG {
+	if logLevel < INFO {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandReply, Seq: %d, State: %d", id, reply.Seq, reply.State)
@@ -647,6 +662,9 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handlePrepareVote", px.logLevel)
+	defer func() {
+		px.dump("After handlePrepareVote", px.logLevel)
+	}()
 	var reply PrepareReply
 	if args.N > px.n_p {
 		state := &InstanceState{
@@ -670,6 +688,9 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	ext.Reply.dump(px.logLevel, px.id)
 	px.dump("Before handlePrepareReply", px.logLevel)
+	defer func() {
+		px.dump("After handlePrepareReply", px.logLevel)
+	}()
 	reply := ext.Reply
 	if reply.N_a == -2 {
 		return
@@ -696,6 +717,9 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handleAcceptVote", px.logLevel)
+	defer func() {
+		px.dump("After handleAcceptVote", px.logLevel)
+	}()
 	var reply AcceptReply
 	if args.N >= px.n_p {
 		px.n_p = args.N
@@ -711,6 +735,9 @@ func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	ext.Reply.dump(px.logLevel, px.id)
 	px.dump("Before handleAcceptReply", px.logLevel)
+	defer func() {
+		px.dump("After handleAcceptReply", px.logLevel)
+	}()
 	reply := ext.Reply
 	if reply.N == -2 {
 		return
@@ -728,6 +755,9 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handleDecided", px.logLevel)
+	defer func() {
+		px.dump("After handleDecided", px.logLevel)
+	}()
 	var reply DecidedReply
 	state, ok := px.instanceState[args.N]
 	if !ok {
@@ -746,11 +776,17 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	ext.Reply.dump(px.logLevel, px.id)
 	px.dump("Before handleDecidedReply", px.logLevel)
+	defer func() {
+		px.dump("After handleDecidedReply", px.logLevel)
+	}()
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handleCommand", px.logLevel)
+	defer func() {
+		px.dump("After handleCommand", px.logLevel)
+	}()
 	var reply CommandReply
 	switch args.Name {
 	case START:
