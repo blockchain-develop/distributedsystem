@@ -45,6 +45,13 @@ type Fate int
 var id int = 1000000
 
 const (
+	FATAL  = iota
+	ERROR
+	INFO
+	DEBUG
+)
+
+const (
 	Decided   Fate = iota + 1
 	Pending        // not yet decided.
 	Forgotten      // decided but forgotten.
@@ -127,11 +134,11 @@ type Paxos struct {
 	timer                       *time.Timer
 
 	id                          int
-	debug                       bool
+	logLevel                    int
 }
 
-func (px *Paxos) dump(prefix string, debug bool) {
-	if debug == false {
+func (px *Paxos) dump(prefix string, logLevel int) {
+	if logLevel < INFO  {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, %s, paxos state: \n", px.id, prefix)
@@ -201,16 +208,16 @@ type CommandReply struct {
 	V        interface{}
 }
 
-func (args *CommandArgs) dump(debug bool, id int) {
-	if debug == false {
+func (args *CommandArgs) dump(logLevel int, id int) {
+	if logLevel < DEBUG {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandArgs, Name: %d, Seq: %d", id, args.Name, args.Seq)
 	log.Printf(dumpLog)
 }
 
-func (reply *CommandReply) dump(debug bool, id int) {
-	if debug == false {
+func (reply *CommandReply) dump(logLevel int, id int) {
+	if logLevel < DEBUG {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive CommandReply, Seq: %d, State: %d", id, reply.Seq, reply.State)
@@ -234,16 +241,16 @@ type PrepareExt struct {
 	Reply     *PrepareReply
 }
 
-func (args *PrepareArgs) dump(debug bool, id int) {
-	if debug == false {
+func (args *PrepareArgs) dump(logLevel int, id int) {
+	if logLevel < INFO {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
-func (reply *PrepareReply) dump(debug bool, id int) {
-	if debug == false {
+func (reply *PrepareReply) dump(logLevel int, id int) {
+	if logLevel < INFO{
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d", id, reply.N, reply.N_a)
@@ -294,16 +301,16 @@ type AcceptExt struct {
 	Reply     *AcceptReply
 }
 
-func (args *AcceptArgs) dump(debug bool, id int) {
-	if debug == false {
+func (args *AcceptArgs) dump(logLevel int, id int) {
+	if logLevel < INFO {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
-func (reply *AcceptReply) dump(debug bool, id int) {
-	if debug == false {
+func (reply *AcceptReply) dump(logLevel int, id int) {
+	if logLevel < INFO {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptReply, N: %d", id, reply.N)
@@ -354,16 +361,16 @@ type DecidedExt struct {
 	Reply     *DecidedReply
 }
 
-func (args *DecidedArgs) dump(debug bool, id int) {
-	if debug == false {
+func (args *DecidedArgs) dump(logLevel int, id int) {
+	if logLevel < INFO {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d", id, args.N)
 	log.Printf(dumpLog)
 }
 
-func (reply *DecidedReply) dump(debug bool, id int) {
-	if debug == false {
+func (reply *DecidedReply) dump(logLevel int, id int) {
+	if logLevel < INFO {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedReply, ", id)
@@ -560,7 +567,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.me = me
 	px.id = id
 	id ++
-	px.debug = true
+	px.logLevel = INFO
 
 	// Your initialization code here.
 	px.n_p = -1
@@ -638,8 +645,8 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 }
 
 func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
-	args.dump(px.debug, px.id)
-	px.dump("Before handlePrepareVote", px.debug)
+	args.dump(px.logLevel, px.id)
+	px.dump("Before handlePrepareVote", px.logLevel)
 	var reply PrepareReply
 	if args.N > px.n_p {
 		state := &InstanceState{
@@ -661,8 +668,8 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 }
 
 func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
-	ext.Reply.dump(px.debug, px.id)
-	px.dump("Before handlePrepareReply", px.debug)
+	ext.Reply.dump(px.logLevel, px.id)
+	px.dump("Before handlePrepareReply", px.logLevel)
 	reply := ext.Reply
 	if reply.N_a == -2 {
 		return
@@ -687,8 +694,8 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 }
 
 func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
-	args.dump(px.debug, px.id)
-	px.dump("Before handleAcceptVote", px.debug)
+	args.dump(px.logLevel, px.id)
+	px.dump("Before handleAcceptVote", px.logLevel)
 	var reply AcceptReply
 	if args.N >= px.n_p {
 		px.n_p = args.N
@@ -702,8 +709,8 @@ func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 }
 
 func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
-	ext.Reply.dump(px.debug, px.id)
-	px.dump("Before handleAcceptReply", px.debug)
+	ext.Reply.dump(px.logLevel, px.id)
+	px.dump("Before handleAcceptReply", px.logLevel)
 	reply := ext.Reply
 	if reply.N == -2 {
 		return
@@ -719,8 +726,8 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 }
 
 func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
-	args.dump(px.debug, px.id)
-	px.dump("Before handleDecided", px.debug)
+	args.dump(px.logLevel, px.id)
+	px.dump("Before handleDecided", px.logLevel)
 	var reply DecidedReply
 	state, ok := px.instanceState[args.N]
 	if !ok {
@@ -737,13 +744,13 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 }
 
 func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
-	ext.Reply.dump(px.debug, px.id)
-	px.dump("Before handleDecidedReply", px.debug)
+	ext.Reply.dump(px.logLevel, px.id)
+	px.dump("Before handleDecidedReply", px.logLevel)
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
-	args.dump(px.debug, px.id)
-	px.dump("Before handleCommand", px.debug)
+	args.dump(px.logLevel, px.id)
+	px.dump("Before handleCommand", px.logLevel)
 	var reply CommandReply
 	switch args.Name {
 	case START:
