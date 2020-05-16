@@ -151,10 +151,16 @@ func (px *Paxos) dump(prefix string, logLevel int) {
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, %s, paxos state: \n", px.id, prefix)
 	dumpLog += fmt.Sprintf("    n_p: %d, n_a: %d, prepare vote counter: %d, accept vote counter: %d, prepared: %v, accepted: %v\n",
-		px.n_p, px.n_a, px.prepareVoteCounter, px.acceptVoteCounter, px.prepared, px.accepted)
+		px.n_p, px.n_a, px.prepareVoteCounter, px.acceptVoteCounter, px.prepared, px.accepted, px.decided)
+	dumpLog += fmt.Sprintf("    instance index: %d\n", px.instanceIndex)
 	dumpLog += "    state:"
-	for k, v := range px.instanceState {
-		dumpLog += fmt.Sprintf(" [%d,%d] ", k, v.state)
+	for _, item := range px.instanceState {
+		dumpLog += fmt.Sprintf(" [%d,%d] ", item.seq, item.state)
+	}
+	dumpLog += "\n"
+	dumpLog += "    decided:"
+	for _, item := range px.decidedInstance {
+		dumpLog += fmt.Sprintf(" [%d,%d] ", item.seq, item.state)
 	}
 	dumpLog += "\n"
 	log.Printf(dumpLog)
