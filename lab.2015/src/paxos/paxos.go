@@ -121,7 +121,7 @@ type Paxos struct {
 	decided                     bool
 	acceptVoteCounter           int
 
-	instanceState               map[int]*InstanceState
+	instanceState               []*InstanceState
 	instanceIndex               int
 
 	decidedInstance             []*InstanceState
@@ -614,7 +614,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.v_a = nil
 	px.decidedInstance = make([]*InstanceState, 0)
 
-	px.instanceState = make(map[int]*InstanceState, 0)
+	px.instanceState = make([]*InstanceState, 0)
 	px.instanceIndex = 0
 
 	px.proposeN = 0
@@ -832,12 +832,8 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	if px.prepareVote != nil {
 		return
 	}
-	state, ok := px.instanceState[px.instanceIndex]
-	if !ok {
-		panic("instance error")
-	} else {
-		state.state = Decided
-	}
+	state := px.instanceState[px.instanceIndex]
+	state.state = Decided
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
@@ -854,7 +850,7 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 			seq: args.Seq,
 			state: Pending,
 		}
-		px.instanceState[args.Seq] = state
+		px.instanceState = append(px.instanceState, state)
 		return &reply
 	case DONE:
 		seq := args.Seq
