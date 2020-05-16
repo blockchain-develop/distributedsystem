@@ -92,7 +92,7 @@ acceptor's accept(n, v) handler:
 */
 
 type InstanceState struct {
-	instance                 *interface{}
+	instance                 interface{}
 	state                    Fate
 	seq                      int
 }
@@ -802,7 +802,7 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	}()
 	instance := &InstanceState{
 		seq: args.Seq,
-		instance: &args.V,
+		instance: args.V,
 		state: Decided,
 	}
 	px.decidedInstance = append(px.decidedInstance, instance)
@@ -850,7 +850,7 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	switch args.Name {
 	case START:
 		state := &InstanceState{
-			instance: &args.V,
+			instance: args.V,
 			seq: args.Seq,
 			state: Pending,
 		}
@@ -902,7 +902,7 @@ func (px *Paxos) eventLoop() {
 			for len(px.instanceState) > px.instanceIndex && px.decided == true {
 				instance := px.instanceState[px.instanceIndex]
 				if instance.state == Pending {
-					px.Prepare(*instance.instance)
+					px.Prepare(instance.instance)
 					break
 				} else {
 					px.instanceIndex ++
