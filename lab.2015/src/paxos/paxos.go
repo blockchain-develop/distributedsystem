@@ -111,12 +111,19 @@ type Paxos struct {
 	v_p                         interface{}
 	n_a                         int
 	v_a                         interface{}
+
+	proposeN                    int
+	proposeV                    interface{}
 	prepareVote                 *PrepareReply
 	prepareVoteCounter          int
 	prepared                    bool
 	accepted                    bool
+	decided                     bool
 	acceptVoteCounter           int
+	rounding                    bool
+
 	instanceState               map[int]*InstanceState
+	instanceIndex               int
 
 	prepareReplyChan            chan *PrepareExt
 	prepareArgsChan             chan *PrepareArgs
@@ -221,6 +228,7 @@ func CommandName(name int) string {
 	case STATUS:
 		return "status"
 	}
+	return ""
 }
 
 func (args *CommandArgs) dump(logLevel int, id int) {
@@ -272,10 +280,22 @@ func (reply *PrepareReply) dump(logLevel int, id int) {
 	log.Printf(dumpLog)
 }
 
-func (px *Paxos) Prepare(n int, v interface{}) {
+func (px *Paxos) Prepare(v interface{}) {
+	// choose a n
+	n := int(time.Now().Unix())
+	n = n << 8
+	n = n + px.id
+	px.proposeN = n
+	px.proposeV = v
+	px.prepareVoteCounter = 0
+	px.prepareVote = nil
+	px.prepared = false
+	px.accepted = false
+	px.decided = false
+
 	args := &PrepareArgs{
-		N: n,
-		V: v,
+		N: px.proposeN,
+		V: px.proposeV,
 	}
 	for _, peer := range px.peers {
 		go func(server string) {
@@ -334,7 +354,6 @@ func (reply *AcceptReply) dump(logLevel int, id int) {
 
 func (px *Paxos) Accept(n int, v interface{}) {
 	px.acceptVoteCounter = 0
-	px.accepted = false
 	args := &AcceptArgs{
 		N: n,
 		V: v,
@@ -369,6 +388,7 @@ type DecidedArgs struct {
 }
 
 type DecidedReply struct {
+	N           int
 }
 
 type DecidedExt struct {
@@ -589,6 +609,9 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.n_a = -1
 
 	px.instanceState = make(map[int]*InstanceState, 0)
+	px.instanceIndex = 0
+	px.proposeN = 0
+
 	px.prepareReplyChan = make(chan *PrepareExt)
 	px.prepareArgsChan = make(chan *PrepareArgs)
 	px.prepareReplyInterChan = make(chan *PrepareReply)
@@ -667,12 +690,6 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	}()
 	var reply PrepareReply
 	if args.N > px.n_p {
-		state := &InstanceState{
-			instance: &args.V,
-			seq: args.N,
-			state: Pending,
-		}
-		px.instanceState[args.N] = state
 		px.n_p = args.N
 		px.v_p = args.V
 		reply.N = args.N
@@ -680,7 +697,7 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 		reply.V_a = px.v_a
 	} else {
 		reply.N = args.N
-		reply.N_a = -2
+		reply.N_a = -1
 	}
 	return &reply
 }
@@ -691,26 +708,33 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	defer func() {
 		px.dump("After handlePrepareReply", px.logLevel)
 	}()
-	reply := ext.Reply
-	if reply.N_a == -2 {
-		return
-	}
 	if px.prepared == true {
 		return
 	}
-	if px.prepareVote == nil {
-		px.prepareVote = reply
-	} else if reply.N_a > px.prepareVote.N_a {
-		px.prepareVote = reply
+	reply := ext.Reply
+	if reply.N != px.proposeN {
+		return
+	}
+	if reply.N_a == -1 {
+		return
+	}
+	if reply.N_a > 0 {
+		if px.prepareVote == nil {
+			px.prepareVote = reply
+		} else if reply.N_a > px.prepareVote.N_a {
+			px.prepareVote = reply
+		}
 	}
 	px.prepareVoteCounter ++
 	if px.prepareVoteCounter > len(px.peers) / 2 {
-		px.prepared = true
-		if px.prepareVote.N_a > px.n_a {
-			px.n_p = px.prepareVote.N_a
-			px.v_p = px.prepareVote.V_a
+		var v_accept interface{}
+		if px.prepareVote != nil {
+			v_accept= px.prepareVote.V_a
+		} else {
+			v_accept = px.proposeV
 		}
-		px.Accept(px.n_p, px.v_p)
+		px.Accept(px.proposeN, v_accept)
+		px.prepared = true
 	}
 }
 
@@ -727,7 +751,7 @@ func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 		px.v_a = args.V
 		reply.N = args.N
 	} else {
-		reply.N = -2
+		reply.N = -1
 	}
 	return &reply
 }
@@ -738,17 +762,20 @@ func (px *Paxos) handleAcceptReply(ext *AcceptExt) {
 	defer func() {
 		px.dump("After handleAcceptReply", px.logLevel)
 	}()
-	reply := ext.Reply
-	if reply.N == -2 {
+	if px.accepted == true {
 		return
 	}
-	if px.accepted == true {
+	reply := ext.Reply
+	if reply.N != px.proposeN {
+		return
+	}
+	if reply.N == -1 {
 		return
 	}
 	px.acceptVoteCounter ++
 	if px.acceptVoteCounter > len(px.peers)/2 {
+		px.Decided(px.proposeN, px.proposeV)
 		px.accepted = true
-		px.Decided(px.n_a, px.v_a)
 	}
 }
 
@@ -759,17 +786,11 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 		px.dump("After handleDecided", px.logLevel)
 	}()
 	var reply DecidedReply
-	state, ok := px.instanceState[args.N]
-	if !ok {
-		state := &InstanceState{
-			instance: &args.V,
-			seq: args.N,
-			state: Decided,
-		}
-		px.instanceState[args.N] = state
-	} else {
-		state.state = Decided
-	}
+	reply.N = args.N
+	px.n_p = 0
+	px.v_p = nil
+	px.n_a = 0
+	px.v_a = nil
 	return &reply
 }
 
@@ -779,6 +800,23 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	defer func() {
 		px.dump("After handleDecidedReply", px.logLevel)
 	}()
+	if px.decided == true {
+		return
+	}
+	reply := ext.Reply
+	if reply.N != px.proposeN {
+		return
+	}
+	px.decided = true
+	if px.prepareVote != nil {
+		return
+	}
+	state, ok := px.instanceState[px.instanceIndex]
+	if !ok {
+		panic("instance error")
+	} else {
+		state.state = Decided
+	}
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
@@ -790,10 +828,12 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	var reply CommandReply
 	switch args.Name {
 	case START:
-		px.Prepare(args.Seq, args.V)
-		px.prepareVoteCounter = 0
-		px.prepared = false
-		px.prepareVote = nil
+		state := &InstanceState{
+			instance: &args.V,
+			seq: args.Seq,
+			state: Pending,
+		}
+		px.instanceState[args.Seq] = state
 		return &reply
 	case DONE:
 		seq := args.Seq
@@ -840,7 +880,15 @@ func (px *Paxos) eventLoop() {
 	for {
 		select {
 		case <- px.timer.C:
-
+			for len(px.instanceState) > px.instanceIndex && px.decided == true {
+				instance := px.instanceState[px.instanceIndex]
+				if instance.state == Pending {
+					px.Prepare(instance.instance)
+					break
+				} else {
+					px.instanceIndex ++
+				}
+			}
 		case prepareArgs, ok :=  <- px.prepareArgsChan:
 			if !ok || prepareArgs == nil {
 				break
