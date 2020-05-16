@@ -150,7 +150,7 @@ func (px *Paxos) dump(prefix string, logLevel int) {
 		return
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, %s, paxos state: \n", px.id, prefix)
-	dumpLog += fmt.Sprintf("    n_p: %d, n_a: %d, prepare vote counter: %d, accept vote counter: %d, prepared: %v, accepted: %v\n",
+	dumpLog += fmt.Sprintf("    n_p: %d, n_a: %d, prepare vote counter: %d, accept vote counter: %d, prepared: %v, accepted: %v, decided: %v\n",
 		px.n_p, px.n_a, px.prepareVoteCounter, px.acceptVoteCounter, px.prepared, px.accepted, px.decided)
 	dumpLog += fmt.Sprintf("    instance index: %d\n", px.instanceIndex)
 	dumpLog += "    state:"
