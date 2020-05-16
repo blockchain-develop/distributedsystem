@@ -124,6 +124,8 @@ type Paxos struct {
 	instanceState               map[int]*InstanceState
 	instanceIndex               int
 
+	decidedInstance             []*InstanceState
+
 	prepareReplyChan            chan *PrepareExt
 	prepareArgsChan             chan *PrepareArgs
 	prepareReplyInterChan       chan *PrepareReply
@@ -287,6 +289,7 @@ func (px *Paxos) Prepare(v interface{}) {
 	px.proposeN = n
 	px.proposeV = v
 	px.prepareVoteCounter = 0
+	px.acceptVoteCounter = 0
 	px.prepareVote = nil
 	px.prepared = false
 	px.accepted = false
@@ -383,6 +386,7 @@ func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) error {
 
 type DecidedArgs struct {
 	N          int
+	Seq        int
 	V          interface{}
 }
 
@@ -608,6 +612,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.v_p = nil
 	px.n_a = 0
 	px.v_a = nil
+	px.decidedInstance = make([]*InstanceState, 0)
 
 	px.instanceState = make(map[int]*InstanceState, 0)
 	px.instanceIndex = 0
@@ -742,7 +747,8 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 		} else {
 			v_accept = px.proposeV
 		}
-		px.Accept(px.proposeN, v_accept)
+		px.proposeV = v_accept
+		px.Accept(px.proposeN, px.proposeV)
 		px.prepared = true
 	}
 }
@@ -794,6 +800,12 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	defer func() {
 		px.dump("After handleDecided", px.logLevel)
 	}()
+	instance := &InstanceState{
+		seq: args.Seq,
+		instance: &args.V,
+		state: Decided,
+	}
+	px.decidedInstance = append(px.decidedInstance, instance)
 	var reply DecidedReply
 	reply.N = args.N
 	px.n_p = 0
@@ -846,39 +858,37 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 		return &reply
 	case DONE:
 		seq := args.Seq
-		for k, v := range px.instanceState {
-			if k <= seq {
-				v.state = Forgotten
+		for _, item := range px.decidedInstance {
+			if item.seq <= seq {
+				item.state = Forgotten
 			}
 		}
 		return &reply
 	case MAX:
 		max := 0
-		for k, v := range px.instanceState {
-			if v.state == Decided && k > max {
-				max = k
+		for _, item := range px.decidedInstance {
+			if item.state == Decided && item.seq > max {
+				max = item.seq
 			}
 		}
 		reply.Seq = max
 		return &reply
 	case MIN:
 		min := math.MaxInt32
-		for k, v := range px.instanceState {
-			if v.state == Decided && k < min {
-				min = k
+		for _, item := range px.decidedInstance {
+			if item.state == Decided && item.seq < min {
+				min = item.seq
 			}
 		}
 		reply.Seq = min
 		return &reply
 	case STATUS:
 		seq := args.Seq
-		state, ok := px.instanceState[seq]
-		if !ok {
-			reply.State = Forgotten
-			reply.V = nil
-		} else {
-			reply.State = state.state
-			reply.V = *state.instance
+		for _, item := range px.decidedInstance {
+			if item.seq == seq {
+				reply.State = item.state
+				reply.V = item.instance
+			}
 		}
 		return &reply
 	}
@@ -892,7 +902,7 @@ func (px *Paxos) eventLoop() {
 			for len(px.instanceState) > px.instanceIndex && px.decided == true {
 				instance := px.instanceState[px.instanceIndex]
 				if instance.state == Pending {
-					px.Prepare(instance.instance)
+					px.Prepare(*instance.instance)
 					break
 				} else {
 					px.instanceIndex ++
