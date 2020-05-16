@@ -120,7 +120,6 @@ type Paxos struct {
 	accepted                    bool
 	decided                     bool
 	acceptVoteCounter           int
-	rounding                    bool
 
 	instanceState               map[int]*InstanceState
 	instanceIndex               int
@@ -138,7 +137,7 @@ type Paxos struct {
 	commandArgsChan             chan *CommandArgs
 	exitChan                    chan bool
 
-	timer                       *time.Timer
+	timer                       *time.Ticker
 
 	id                          int
 	logLevel                    int
@@ -605,12 +604,22 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.logLevel = INFO
 
 	// Your initialization code here.
-	px.n_p = -1
-	px.n_a = -1
+	px.n_p = 0
+	px.v_p = nil
+	px.n_a = 0
+	px.v_a = nil
 
 	px.instanceState = make(map[int]*InstanceState, 0)
 	px.instanceIndex = 0
+
 	px.proposeN = 0
+	px.proposeV = nil
+	px.prepareVote = nil
+	px.prepareVoteCounter = 0
+	px.acceptVoteCounter = 0
+	px.prepared = false
+	px.accepted = false
+	px.decided = true
 
 	px.prepareReplyChan = make(chan *PrepareExt)
 	px.prepareArgsChan = make(chan *PrepareArgs)
@@ -624,7 +633,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.commandReplyChan = make(chan *CommandReply)
 	px.commandArgsChan = make(chan *CommandArgs)
 	px.exitChan = make(chan bool)
-	px.timer = time.NewTimer(time.Millisecond * 5)
+	px.timer = time.NewTicker(time.Second * 1)
 
 	go px.eventLoop()
 

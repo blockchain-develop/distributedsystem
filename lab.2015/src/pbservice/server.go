@@ -355,7 +355,7 @@ func StartServer(vshost string, me string) *PBServer {
 	pb.view = nil
 	pb.state = IDLE
 	pb.synced = false
-	pb.debug = true
+	pb.debug = false
 	pb.requests = make(map[string]*RequestState)
 	pb.partition = false
 
