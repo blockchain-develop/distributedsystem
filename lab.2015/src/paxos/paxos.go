@@ -965,7 +965,7 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 			}
 		}
 		if min == math.MaxInt32 {
-			min = 0
+			min = -1
 		}
 		reply.Seq = min
 		return &reply
