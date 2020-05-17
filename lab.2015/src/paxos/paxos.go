@@ -289,7 +289,8 @@ func (args *PrepareArgs) dump(logLevel int, id int) {
 		return
 	}
 	seq := args.V.(Instance).Seq
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d, V.Seq: %d", id, args.N, seq)
+	v := args.V.(Instance).V
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d, V.Seq: %d, V.V: %v", id, args.N, seq, v)
 	log.Printf(dumpLog)
 }
 
@@ -298,10 +299,12 @@ func (reply *PrepareReply) dump(logLevel int, id int) {
 		return
 	}
 	seq := 0
+	v := nil
 	if reply.V_a != nil {
 		seq = reply.V_a.(Instance).Seq
+		v = reply.V_a.(Instance).V
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d, V_a.Seq: %d", id, reply.N, reply.N_a, seq)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d, V_a.Seq: %d, V_a.V: %v", id, reply.N, reply.N_a, seq, v)
 	log.Printf(dumpLog)
 }
 
@@ -369,7 +372,8 @@ func (args *AcceptArgs) dump(logLevel int, id int) {
 		return
 	}
 	seq := args.V.(Instance).Seq
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d, V.Seq: %d", id, args.N, seq)
+	v := args.V.(Instance).V
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d, V.Seq: %d, V.V: %v", id, args.N, seq, v)
 	log.Printf(dumpLog)
 }
 
@@ -430,7 +434,8 @@ func (args *DecidedArgs) dump(logLevel int, id int) {
 		return
 	}
 	seq := args.V.(Instance).Seq
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d, V.Seq: %d", id, args.N, seq)
+	v := args.V.(Instance).V
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d, V.Seq: %d, V.V: %v", id, args.N, seq, v)
 	log.Printf(dumpLog)
 }
 
@@ -886,7 +891,6 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 		decidedInstance.state = Decided
 		px.tryDecidedInstance(decidedInstance)
 	}
-
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
