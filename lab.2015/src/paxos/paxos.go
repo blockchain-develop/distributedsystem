@@ -495,6 +495,16 @@ func (px *Paxos) DecidedReceive(args *DecidedArgs, reply *DecidedReply) error {
 	return nil
 }
 
+func (px *Paxos) CommandReceive(args *CommandArgs, reply *CommandReply) error {
+	px.commandArgsChan <- args
+	internelReply, ok := <- px.commandReplyChan
+	if !ok || reply == nil {
+		log.Fatal("Start fatal.")
+	}
+	*reply = *internelReply
+	return nil
+}
+
 //
 // the application wants paxos to start agreement on
 // instance seq, with proposed value v.
@@ -580,6 +590,7 @@ func (px *Paxos) Max() int {
 // missed -- the other peers therefor cannot forget these
 // instances.
 //
+/*
 func (px *Paxos) Min() int {
 	// You code here.
 	px.commandArgsChan <- &CommandArgs{
@@ -591,7 +602,21 @@ func (px *Paxos) Min() int {
 	}
 	return reply.Seq
 }
-
+*/
+func (px *Paxos) Min() int {
+	args := &CommandArgs{
+		Name: MIN,
+	}
+	min := math.MaxInt32
+	for _, peer := range px.peers {
+		var reply CommandReply
+		call(peer, "Paxos.CommandReceive", args, &reply)
+		if reply.Seq != 0 && reply.Seq < min {
+			min = reply.Seq
+		}
+	}
+	return min
+}
 //
 // the application wants to know whether this
 // peer thinks an instance has been decided,
