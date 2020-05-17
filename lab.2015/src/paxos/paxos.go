@@ -97,8 +97,8 @@ type InstanceState struct {
 }
 
 type Instance struct {
-	v                        interface{}
-	seq                      int
+	V                        interface{}
+	Seq                      int
 }
 
 type Paxos struct {
@@ -815,7 +815,7 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	instance := args.V.(Instance)
 	instannceDecided := false
 	for _, item := range px.decidedInstances {
-		if item.instance.seq == instance.seq {
+		if item.instance.Seq == instance.Seq {
 			instannceDecided = true
 			break
 		}
@@ -868,8 +868,8 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	case START:
 		state := &InstanceState{
 			instance: Instance{
-				seq: args.Seq,
-				v: args.V,
+				Seq: args.Seq,
+				V: args.V,
 			},
 			state: Pending,
 		}
@@ -878,7 +878,7 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	case DONE:
 		seq := args.Seq
 		for _, item := range px.decidedInstances {
-			if item.instance.seq <= seq {
+			if item.instance.Seq <= seq {
 				item.state = Forgotten
 			}
 		}
@@ -886,8 +886,8 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	case MAX:
 		max := 0
 		for _, item := range px.decidedInstances {
-			if item.state == Decided && item.instance.seq > max {
-				max = item.instance.seq
+			if item.state == Decided && item.instance.Seq > max {
+				max = item.instance.Seq
 			}
 		}
 		reply.Seq = max
@@ -895,8 +895,8 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	case MIN:
 		min := math.MaxInt32
 		for _, item := range px.decidedInstances {
-			if item.state == Decided && item.instance.seq < min {
-				min = item.instance.seq
+			if item.state == Decided && item.instance.Seq < min {
+				min = item.instance.Seq
 			}
 		}
 		reply.Seq = min
@@ -904,7 +904,7 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 	case STATUS:
 		seq := args.Seq
 		for _, item := range px.decidedInstances {
-			if item.instance.seq == seq {
+			if item.instance.Seq == seq {
 				reply.State = item.state
 				reply.V = item.instance
 			}
