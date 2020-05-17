@@ -287,7 +287,8 @@ func (args *PrepareArgs) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d", id, args.N)
+	seq := args.V.(Instance).Seq
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d, V.Seq: %d", id, args.N, seq)
 	log.Printf(dumpLog)
 }
 
@@ -295,7 +296,11 @@ func (reply *PrepareReply) dump(logLevel int, id int) {
 	if logLevel < INFO{
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d", id, reply.N, reply.N_a)
+	seq := 0
+	if reply.V_a != nil {
+		seq = reply.V_a.(Instance).Seq
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d, V_a.Seq: %d", id, reply.N, reply.N_a, seq)
 	log.Printf(dumpLog)
 }
 
@@ -362,7 +367,8 @@ func (args *AcceptArgs) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d", id, args.N)
+	seq := args.V.(Instance).Seq
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d, V.Seq: %d", id, args.N, seq)
 	log.Printf(dumpLog)
 }
 
@@ -422,7 +428,8 @@ func (args *DecidedArgs) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d", id, args.N)
+	seq := args.V.(Instance).Seq
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d, V.Seq: %d", id, args.N, seq)
 	log.Printf(dumpLog)
 }
 
@@ -430,7 +437,7 @@ func (reply *DecidedReply) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
-	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedReply, ", id)
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedReply, N: %d", id, reply.N)
 	log.Printf(dumpLog)
 }
 
@@ -865,11 +872,13 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
+	/*
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handleCommand", px.logLevel)
 	defer func() {
 		px.dump("After handleCommand", px.logLevel)
 	}()
+	*/
 	var reply CommandReply
 	switch args.Name {
 	case START:
