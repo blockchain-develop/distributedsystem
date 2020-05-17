@@ -97,6 +97,11 @@ type InstanceState struct {
 	seq                      int
 }
 
+type Instance struct {
+	instance                 interface{}
+	seq                      int
+}
+
 type Paxos struct {
 	mu         sync.Mutex
 	l          net.Listener
@@ -395,7 +400,6 @@ func (px *Paxos) AcceptVote(args *AcceptArgs, reply *AcceptReply) error {
 
 type DecidedArgs struct {
 	N          int
-	Seq        int
 	V          interface{}
 }
 
@@ -809,12 +813,22 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	defer func() {
 		px.dump("After handleDecided", px.logLevel)
 	}()
-	instance := &InstanceState{
-		seq: args.Seq,
-		instance: args.V,
-		state: Decided,
+	instance := args.V.(Instance)
+	instannceDecided := false
+	for _, item := range px.decidedInstance {
+		if item.seq == instance.seq {
+			instannceDecided = true
+			break
+		}
 	}
-	px.decidedInstance = append(px.decidedInstance, instance)
+	if instannceDecided == false {
+		dicidedInstance := &InstanceState{
+			seq:      instance.seq,
+			instance: instance.instance,
+			state:    Decided,
+		}
+		px.decidedInstance = append(px.decidedInstance, dicidedInstance)
+	}
 	var reply DecidedReply
 	reply.N = args.N
 	px.n_p = 0
@@ -907,7 +921,10 @@ func (px *Paxos) eventLoop() {
 			for len(px.instanceState) > px.instanceIndex && px.decided == true {
 				instance := px.instanceState[px.instanceIndex]
 				if instance.state == Pending {
-					px.Prepare(instance.instance)
+					px.Prepare(Instance{
+						seq: instance.seq,
+						instance: instance.instance,
+					})
 					break
 				} else {
 					px.instanceIndex ++
