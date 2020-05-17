@@ -901,6 +901,11 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	px.decided = true
 	if px.prepareVote != nil {
 		instance := px.prepareVote.V_a.(Instance)
+		if px.prepareVote.N_a == 1 {
+			decidedInstance := px.instanceStates[px.instanceIndex]
+			decidedInstance.state = Decided
+			decidedInstance.instance = instance
+		}
 		px.tryDecidedInstance( &InstanceState{
 			instance: instance,
 			state: Decided,
