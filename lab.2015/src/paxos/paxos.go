@@ -611,7 +611,7 @@ func (px *Paxos) Min() int {
 	for _, peer := range px.peers {
 		var reply CommandReply
 		call(peer, "Paxos.CommandReceive", args, &reply)
-		if reply.Seq != 0 && reply.Seq < min {
+		if reply.Seq < min {
 			min = reply.Seq
 		}
 	}
