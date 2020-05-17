@@ -121,6 +121,7 @@ type Paxos struct {
 	v_p                         interface{}
 	n_a                         int
 	v_a                         interface{}
+	rounding                    bool
 
 	proposeN                    int
 	proposeV                    interface{}
@@ -638,6 +639,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.v_p = nil
 	px.n_a = 0
 	px.v_a = nil
+	px.rounding = false
 	px.decidedInstances = make([]*InstanceState, 0)
 
 	px.instanceStates = make([]*InstanceState, 0)
@@ -728,6 +730,7 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	defer func() {
 		px.dump("After handlePrepareVote", px.logLevel)
 	}()
+	px.rounding = true
 	var reply PrepareReply
 	if args.N > px.n_p {
 		px.n_p = args.N
@@ -786,6 +789,10 @@ func (px *Paxos) handleAcceptVote(args *AcceptArgs) *AcceptReply {
 		px.dump("After handleAcceptVote", px.logLevel)
 	}()
 	var reply AcceptReply
+	if px.rounding == false {
+		reply.N = -1
+		return &reply
+	}
 	if args.N >= px.n_p {
 		px.n_p = args.N
 		px.n_a = args.N
@@ -847,6 +854,7 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 	px.v_p = nil
 	px.n_a = 0
 	px.v_a = nil
+	px.rounding = false
 	return &reply
 }
 
