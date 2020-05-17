@@ -299,7 +299,7 @@ func (reply *PrepareReply) dump(logLevel int, id int) {
 		return
 	}
 	seq := 0
-	v := nil
+	var v interface{}
 	if reply.V_a != nil {
 		seq = reply.V_a.(Instance).Seq
 		v = reply.V_a.(Instance).V
@@ -742,6 +742,15 @@ func (px *Paxos) tryDecidedInstance(dicidedInstance *InstanceState) {
 	}
 }
 
+func (px *Paxos) tryGetInstance(seq int) *InstanceState {
+	for _, item := range px.decidedInstances {
+		if item.instance.Seq == seq {
+			return item
+		}
+	}
+	return nil
+}
+
 func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handlePrepareVote", px.logLevel)
@@ -750,15 +759,25 @@ func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	}()
 	px.rounding = true
 	var reply PrepareReply
-	if args.N > px.n_p {
+	seq := args.V.(Instance).Seq
+	instance := px.tryGetInstance(seq)
+	if instance != nil {
 		px.n_p = args.N
 		px.v_p = args.V
 		reply.N = args.N
-		reply.N_a = px.n_a
-		reply.V_a = px.v_a
+		reply.N_a = 1
+		reply.V_a = instance.instance
 	} else {
-		reply.N = args.N
-		reply.N_a = -1
+		if args.N > px.n_p {
+			px.n_p = args.N
+			px.v_p = args.V
+			reply.N = args.N
+			reply.N_a = px.n_a
+			reply.V_a = px.v_a
+		} else {
+			reply.N = args.N
+			reply.N_a = -1
+		}
 	}
 	return &reply
 }
