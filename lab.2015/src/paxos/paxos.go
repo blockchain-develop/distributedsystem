@@ -288,9 +288,13 @@ func (args *PrepareArgs) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
+	/*
 	seq := args.V.(Instance).Seq
 	v := args.V.(Instance).V
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d, V.Seq: %d, V.V: %v", id, args.N, seq, v)
+	*/
+	seq := args.V.(Instance).Seq
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareArgs, N: %d, V.Seq: %d", id, args.N, seq)
 	log.Printf(dumpLog)
 }
 
@@ -298,6 +302,7 @@ func (reply *PrepareReply) dump(logLevel int, id int) {
 	if logLevel < INFO{
 		return
 	}
+	/*
 	seq := 0
 	var v interface{}
 	if reply.V_a != nil {
@@ -305,6 +310,12 @@ func (reply *PrepareReply) dump(logLevel int, id int) {
 		v = reply.V_a.(Instance).V
 	}
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d, V_a.Seq: %d, V_a.V: %v", id, reply.N, reply.N_a, seq, v)
+	*/
+	seq := 0
+	if reply.V_a != nil {
+		seq = reply.V_a.(Instance).Seq
+	}
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive PrepareReply, N: %d, N_a: %d, V_a.Seq: %d", id, reply.N, reply.N_a, seq)
 	log.Printf(dumpLog)
 }
 
@@ -371,9 +382,13 @@ func (args *AcceptArgs) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
+	/*
 	seq := args.V.(Instance).Seq
 	v := args.V.(Instance).V
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d, V.Seq: %d, V.V: %v", id, args.N, seq, v)
+	*/
+	seq := args.V.(Instance).Seq
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive AcceptArgs, N: %d, V.Seq: %d", id, args.N, seq)
 	log.Printf(dumpLog)
 }
 
@@ -433,9 +448,13 @@ func (args *DecidedArgs) dump(logLevel int, id int) {
 	if logLevel < INFO {
 		return
 	}
+	/*
 	seq := args.V.(Instance).Seq
 	v := args.V.(Instance).V
 	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d, V.Seq: %d, V.V: %v", id, args.N, seq, v)
+	*/
+	seq := args.V.(Instance).Seq
+	dumpLog := fmt.Sprintf(" paxos: %d, Receive DecidedArgs, N: %d, V.Seq: %d", id, args.N, seq)
 	log.Printf(dumpLog)
 }
 
