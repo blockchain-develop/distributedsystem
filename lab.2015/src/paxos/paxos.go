@@ -150,6 +150,7 @@ type Paxos struct {
 	exitChan                    chan bool
 
 	timer                       *time.Ticker
+	roundTimeout                int
 
 	id                          int
 	logLevel                    int
@@ -164,12 +165,12 @@ func (px *Paxos) dump(prefix string, logLevel int) {
 		px.n_p, px.n_a, px.prepareVoteCounter, px.acceptVoteCounter, px.prepared, px.accepted, px.decided)
 	dumpLog += fmt.Sprintf("    proposed n: %d\n", px.proposeN)
 	dumpLog += fmt.Sprintf("    instance index: %d\n", px.instanceIndex)
-	dumpLog += "    state:"
+	dumpLog += "    instance states:"
 	for _, item := range px.instanceStates {
 		dumpLog += fmt.Sprintf(" [%d,%d] ", item.instance.Seq, item.state)
 	}
 	dumpLog += "\n"
-	dumpLog += "    decided:"
+	dumpLog += "    decided instances:"
 	for _, item := range px.decidedInstances {
 		dumpLog += fmt.Sprintf(" [%d,%d] ", item.instance.Seq, item.state)
 	}
@@ -656,7 +657,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.commandReplyChan = make(chan *CommandReply)
 	px.commandArgsChan = make(chan *CommandArgs)
 	px.exitChan = make(chan bool)
-	px.timer = time.NewTicker(time.Second * 1)
+	px.timer = time.NewTicker(time.Millisecond * 200)
 
 	go px.eventLoop()
 
@@ -924,10 +925,15 @@ func (px *Paxos) eventLoop() {
 	for {
 		select {
 		case <- px.timer.C:
-			for len(px.instanceStates) > px.instanceIndex && px.decided == true {
+			for (len(px.instanceStates) > px.instanceIndex) {
 				instanceState := px.instanceStates[px.instanceIndex]
 				if instanceState.state == Pending {
-					px.Prepare(instanceState.instance)
+					if px.decided == true || px.roundTimeout >= 5 {
+						px.Prepare(instanceState.instance)
+						px.roundTimeout = 0
+					} else {
+						px.roundTimeout ++
+					}
 					break
 				} else {
 					px.instanceIndex ++
