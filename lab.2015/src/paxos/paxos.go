@@ -942,6 +942,9 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 		for _, item := range px.decidedInstances {
 			if item.instance.Seq <= seq {
 				item.state = Forgotten
+				item.instance = Instance{
+					Seq: item.instance.Seq,
+				}
 			}
 		}
 		return &reply
@@ -960,6 +963,9 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 			if item.state == Decided && item.instance.Seq < min {
 				min = item.instance.Seq
 			}
+		}
+		if min == math.MaxInt32 {
+			min = 0
 		}
 		reply.Seq = min
 		return &reply
