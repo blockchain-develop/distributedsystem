@@ -724,6 +724,19 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	return px
 }
 
+func (px *Paxos) tryDecidedInstance(dicidedInstance *InstanceState) {
+	instannceDecided := false
+	for _, item := range px.decidedInstances {
+		if item.instance.Seq == dicidedInstance.instance.Seq {
+			instannceDecided = true
+			break
+		}
+	}
+	if instannceDecided == false {
+		px.decidedInstances = append(px.decidedInstances, dicidedInstance)
+	}
+}
+
 func (px *Paxos) handlePrepareVote(args *PrepareArgs) *PrepareReply {
 	args.dump(px.logLevel, px.id)
 	px.dump("Before handlePrepareVote", px.logLevel)
@@ -834,20 +847,10 @@ func (px *Paxos) handleDecided(args *DecidedArgs) *DecidedReply {
 		px.dump("After handleDecided", px.logLevel)
 	}()
 	instance := args.V.(Instance)
-	instannceDecided := false
-	for _, item := range px.decidedInstances {
-		if item.instance.Seq == instance.Seq {
-			instannceDecided = true
-			break
-		}
-	}
-	if instannceDecided == false {
-		dicidedInstance := &InstanceState{
-			instance: instance,
-			state:    Decided,
-		}
-		px.decidedInstances = append(px.decidedInstances, dicidedInstance)
-	}
+	px.tryDecidedInstance(&InstanceState{
+		instance: instance,
+		state:    Decided,
+	})
 	var reply DecidedReply
 	reply.N = args.N
 	px.n_p = 0
@@ -874,14 +877,14 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	px.decided = true
 	if px.prepareVote != nil {
 		instance := px.prepareVote.V_a.(Instance)
-		px.decidedInstances = append(px.decidedInstances, &InstanceState{
+		px.tryDecidedInstance( &InstanceState{
 			instance: instance,
 			state: Decided,
 		})
 	} else {
 		decidedInstance := px.instanceStates[px.instanceIndex]
 		decidedInstance.state = Decided
-		px.decidedInstances = append(px.decidedInstances, decidedInstance)
+		px.tryDecidedInstance(decidedInstance)
 	}
 
 }
