@@ -873,10 +873,17 @@ func (px *Paxos) handleDecidedReply(ext *DecidedExt) {
 	}
 	px.decided = true
 	if px.prepareVote != nil {
-		return
+		instance := px.prepareVote.V_a.(Instance)
+		px.decidedInstances = append(px.decidedInstances, &InstanceState{
+			instance: instance,
+			state: Decided,
+		})
+	} else {
+		decidedInstance := px.instanceStates[px.instanceIndex]
+		decidedInstance.state = Decided
+		px.decidedInstances = append(px.decidedInstances, decidedInstance)
 	}
-	state := px.instanceStates[px.instanceIndex]
-	state.state = Decided
+
 }
 
 func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
