@@ -1,6 +1,7 @@
 package paxos
 
 import (
+	"encoding/gob"
 	"fmt"
 	"log"
 	"math"
@@ -101,6 +102,11 @@ type Instance struct {
 	Seq                      int
 }
 
+func init() {
+	//
+	gob.Register(Instance{})
+}
+
 type Paxos struct {
 	mu         sync.Mutex
 	l          net.Listener
@@ -160,12 +166,12 @@ func (px *Paxos) dump(prefix string, logLevel int) {
 	dumpLog += fmt.Sprintf("    instance index: %d\n", px.instanceIndex)
 	dumpLog += "    state:"
 	for _, item := range px.instanceStates {
-		dumpLog += fmt.Sprintf(" [%d,%d] ", item.instance.seq, item.state)
+		dumpLog += fmt.Sprintf(" [%d,%d] ", item.instance.Seq, item.state)
 	}
 	dumpLog += "\n"
 	dumpLog += "    decided:"
 	for _, item := range px.decidedInstances {
-		dumpLog += fmt.Sprintf(" [%d,%d] ", item.instance.seq, item.state)
+		dumpLog += fmt.Sprintf(" [%d,%d] ", item.instance.Seq, item.state)
 	}
 	dumpLog += "\n"
 	log.Printf(dumpLog)
@@ -755,7 +761,7 @@ func (px *Paxos) handlePrepareReply(ext *PrepareExt) {
 	if px.prepareVoteCounter > len(px.peers) / 2 {
 		var v_accept interface{}
 		if px.prepareVote != nil {
-			v_accept= px.prepareVote.V_a
+			v_accept = px.prepareVote.V_a
 		} else {
 			v_accept = px.proposeV
 		}
