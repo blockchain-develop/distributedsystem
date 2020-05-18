@@ -681,7 +681,7 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 	px.me = me
 	px.id = id
 	id ++
-	px.logLevel = INFO
+	px.logLevel = ERROR
 
 	// Your initialization code here.
 	px.n_p = 0
@@ -994,6 +994,9 @@ func (px *Paxos) handleCommand(args *CommandArgs) *CommandReply {
 		return &reply
 	case MAX:
 		max := 0
+		if len(px.decidedInstances) > 0 {
+			max = px.decidedInstances[len(px.decidedInstances) - 1].instance.Seq
+		}
 		for _, item := range px.decidedInstances {
 			if item.state == Decided && item.instance.Seq > max {
 				max = item.instance.Seq
